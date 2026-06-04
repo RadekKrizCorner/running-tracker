@@ -14,6 +14,24 @@ def test_demo_login_is_disabled_by_default(client: TestClient) -> None:
     assert response.json()["code"] == "DEMO_ACCOUNT_DISABLED"
 
 
+def test_auth_options_report_demo_disabled_by_default(client: TestClient) -> None:
+    """Verify public auth options hide demo login by default."""
+    response = client.get("/api/v1/auth/options")
+
+    assert response.status_code == 200
+    assert response.json()["demo_enabled"] is False
+
+
+def test_auth_options_report_demo_enabled(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify public auth options expose enabled demo login."""
+    _enable_demo_account(monkeypatch)
+
+    response = client.get("/api/v1/auth/options")
+
+    assert response.status_code == 200
+    assert response.json()["demo_enabled"] is True
+
+
 def test_demo_login_returns_demo_user_when_enabled(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify enabled demo login creates a demo session."""
     _enable_demo_account(monkeypatch)

@@ -6,10 +6,21 @@ from fastapi import APIRouter, Response
 
 from app.api.deps import CurrentUser, DbSession, SettingsDep, WritableUser
 from app.core.security import create_session_token
-from app.schemas.auth import ChangePasswordRequest, LoginRequest, SetupOwnerRequest, UserRead
+from app.schemas.auth import AuthOptionsRead, ChangePasswordRequest, LoginRequest, SetupOwnerRequest, UserRead
 from app.services.auth_service import authenticate_demo_account, authenticate_owner, change_password, setup_owner
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+@router.get("/options", response_model=AuthOptionsRead)
+def auth_options_endpoint(settings: SettingsDep) -> AuthOptionsRead:
+    """Return public authentication options."""
+    demo_enabled = (
+        settings.demo_account_enabled
+        and bool(settings.demo_account_email.strip())
+        and bool(settings.demo_account_password.strip())
+    )
+    return AuthOptionsRead(demo_enabled=demo_enabled)
 
 
 @router.post("/setup-owner", response_model=UserRead)

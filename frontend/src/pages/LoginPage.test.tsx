@@ -7,18 +7,19 @@ import { LoginPage } from './LoginPage';
 
 describe('LoginPage', () => {
   test('submits owner credentials', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      json: () =>
-        Promise.resolve({
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/auth/options')) {
+        return Promise.resolve(jsonResponse({ demo_enabled: false }));
+      }
+      return Promise.resolve(
+        jsonResponse({
           id: 'user-id',
           email: 'owner@example.com',
           display_name: null,
           timezone: 'Europe/Prague',
           units: 'metric',
         }),
+      );
     });
     vi.stubGlobal('fetch', fetchMock);
     const queryClient = new QueryClient();
@@ -32,6 +33,7 @@ describe('LoginPage', () => {
     );
 
     expect(screen.getByRole('heading', { name: /Přihlášení/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Vyzkoušet demo/i })).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText(/E-mail/i), 'owner@example.com');
     await userEvent.type(screen.getByLabelText(/Heslo/i), 'passwordpassword');
     await userEvent.click(screen.getByRole('button', { name: /Přihlásit/i }));
@@ -42,13 +44,29 @@ describe('LoginPage', () => {
     );
   });
 
+  test('hides demo login when backend reports demo disabled', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ demo_enabled: false })));
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <LoginPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: /Přihlášení/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Vyzkoušet demo/i })).not.toBeInTheDocument();
+  });
+
   test('starts a demo session from the demo button', async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      headers: new Headers({ 'content-type': 'application/json' }),
-      json: () =>
-        Promise.resolve({
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/auth/options')) {
+        return Promise.resolve(jsonResponse({ demo_enabled: true }));
+      }
+      return Promise.resolve(
+        jsonResponse({
           id: 'demo-user-id',
           email: 'demo@example.com',
           display_name: 'Portfolio Demo',
@@ -56,6 +74,7 @@ describe('LoginPage', () => {
           units: 'metric',
           is_demo: true,
         }),
+      );
     });
     vi.stubGlobal('fetch', fetchMock);
     const queryClient = new QueryClient();
@@ -68,7 +87,7 @@ describe('LoginPage', () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(screen.getByRole('button', { name: /Vyzkoušet demo/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /Vyzkoušet demo/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/auth/demo-login'),
@@ -76,3 +95,12 @@ describe('LoginPage', () => {
     );
   });
 });
+
+function jsonResponse(payload: unknown) {
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: () => Promise.resolve(payload),
+  };
+}

@@ -18,6 +18,12 @@ class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AuthOptionsRead(BaseModel):
+    """Represent public authentication options."""
+
+    demo_enabled: bool = False
+
+
 class SetupOwnerRequest(BaseModel):
     """Represent the owner setup request."""
 

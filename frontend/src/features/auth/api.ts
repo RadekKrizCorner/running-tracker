@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../lib/api/client';
-import type { User } from '../../lib/api/types';
+import type { AuthOptions, User } from '../../lib/api/types';
+
+export function useAuthOptions() {
+  return useQuery({
+    queryKey: ['auth-options'],
+    queryFn: () => apiRequest<AuthOptions>('/auth/options'),
+    retry: false,
+  });
+}
 
 export function useMe() {
   return useQuery({

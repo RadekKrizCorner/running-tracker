@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useDemoLogin, useLogin } from '../features/auth/api';
+import { useAuthOptions, useDemoLogin, useLogin } from '../features/auth/api';
 import { ApiError } from '../lib/api/client';
 import { useTranslation } from '../lib/i18n';
 
 export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const authOptions = useAuthOptions();
   const login = useLogin();
   const demoLogin = useDemoLogin();
   const [email, setEmail] = useState('');
@@ -45,18 +46,20 @@ export function LoginPage() {
         <button className="primary-button" type="submit" disabled={login.isPending}>
           {login.isPending ? t('auth.loggingIn') : t('auth.loginButton')}
         </button>
-        <button
-          className="secondary-button"
-          type="button"
-          disabled={demoLogin.isPending}
-          onClick={() => {
-            demoLogin.mutate(undefined, {
-              onSuccess: () => navigate('/dashboard'),
-            });
-          }}
-        >
-          {demoLogin.isPending ? t('auth.loggingIn') : t('auth.tryDemo')}
-        </button>
+        {authOptions.data?.demo_enabled ? (
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={demoLogin.isPending}
+            onClick={() => {
+              demoLogin.mutate(undefined, {
+                onSuccess: () => navigate('/dashboard'),
+              });
+            }}
+          >
+            {demoLogin.isPending ? t('auth.loggingIn') : t('auth.tryDemo')}
+          </button>
+        ) : null}
         <Link to="/setup">{t('auth.setupLink')}</Link>
       </form>
     </main>

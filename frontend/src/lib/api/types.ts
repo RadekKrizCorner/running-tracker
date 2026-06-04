@@ -7,6 +7,10 @@ export type User = {
   units: string;
 };
 
+export type AuthOptions = {
+  demo_enabled: boolean;
+};
+
 export type HeartRateZone = {
   name: string;
   min_hr: number;
