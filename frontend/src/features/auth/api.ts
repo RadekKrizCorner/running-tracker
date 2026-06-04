@@ -19,6 +19,14 @@ export function useLogin() {
   });
 }
 
+export function useDemoLogin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiRequest<User>('/auth/demo-login', { method: 'POST' }),
+    onSuccess: (user) => queryClient.setQueryData(['me'], user),
+  });
+}
+
 export function useSetupOwner() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -35,4 +43,3 @@ export function useLogout() {
     onSuccess: () => queryClient.clear(),
   });
 }
-

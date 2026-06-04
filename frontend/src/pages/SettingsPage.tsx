@@ -12,6 +12,7 @@ import {
   useUserPreferences,
 } from '../features/profile/api';
 import { RunnerScene } from '../components/visuals/RunnerScene';
+import { useMe } from '../features/auth/api';
 import type { ElevationRecomputeResponse, HeartRateRecomputeResponse, HeartRateZone, HeartRateZoneSet } from '../lib/api/types';
 import { addDaysToIso } from '../lib/date';
 import { formatDate } from '../lib/format';
@@ -35,6 +36,7 @@ const GARMIN_ZONE_STYLES = [
 
 export function SettingsPage() {
   const { locale, setLocale, t } = useTranslation();
+  const me = useMe();
   const strava = useStravaStatus();
   const sync = useStravaSync();
   const disconnect = useDisconnectStrava();
@@ -67,6 +69,7 @@ export function SettingsPage() {
   const syncJob = useStravaSyncJob(activeJobId);
   const syncJobStatus = syncJob.data?.status;
   const syncActive = sync.isPending || Boolean(activeJobId && !syncJobStatus) || syncStatusIsActive(syncJobStatus);
+  const isDemo = Boolean(me.data?.is_demo);
 
   useEffect(() => {
     if (!preferences.data) {
@@ -127,6 +130,11 @@ export function SettingsPage() {
         </div>
         <RunnerScene variant="settings" label={t('settings.title')} />
       </header>
+      {isDemo ? (
+        <p className="helper-text" role="status">
+          {t('demo.readOnly')} {t('demo.readOnlyDetail')}
+        </p>
+      ) : null}
       <section className="split-grid">
         <div className="panel">
           <div className="panel-heading">
@@ -140,6 +148,7 @@ export function SettingsPage() {
             <button
               className={dashboardMode === 'simple' ? 'active' : ''}
               type="button"
+              disabled={isDemo}
               onClick={() => updateDashboardMode('simple', setDashboardMode, updatePreferences.mutate)}
             >
               {t('settings.simple')}
@@ -147,6 +156,7 @@ export function SettingsPage() {
             <button
               className={dashboardMode === 'advanced' ? 'active' : ''}
               type="button"
+              disabled={isDemo}
               onClick={() => updateDashboardMode('advanced', setDashboardMode, updatePreferences.mutate)}
             >
               {t('settings.advanced')}
@@ -165,6 +175,7 @@ export function SettingsPage() {
             <button
               className={locale === 'cs-CZ' ? 'active' : ''}
               type="button"
+              disabled={isDemo}
               onClick={() => updateLanguage('cs-CZ', setLocale, updatePreferences.mutate)}
             >
               {t('common.czech')}
@@ -172,6 +183,7 @@ export function SettingsPage() {
             <button
               className={locale === 'en-US' ? 'active' : ''}
               type="button"
+              disabled={isDemo}
               onClick={() => updateLanguage('en-US', setLocale, updatePreferences.mutate)}
             >
               {t('common.english')}
@@ -184,12 +196,18 @@ export function SettingsPage() {
           <p>{t('common.status')}: <strong>{strava.data?.status ?? t('common.unknown')}</strong></p>
           <p>{t('settings.missingScopes')}: {missingStravaScopes.join(', ') || t('common.none')}</p>
           <div className="button-row">
-            <a className="primary-button" href={stravaConnectUrl(shouldForceStravaApproval)}>
-              {shouldForceStravaApproval ? t('settings.reauthorizeStrava') : t('settings.connectStrava')}
-            </a>
-            <button className="secondary-button" type="button" disabled={syncActive} onClick={() => startStravaSync('recent')}>{t('settings.syncRecent')}</button>
-            <button className="secondary-button" type="button" disabled={syncActive} onClick={() => startStravaSync('history')}>{t('settings.syncHistory')}</button>
-            <button className="secondary-button" type="button" onClick={() => disconnect.mutate()} disabled={!strava.data?.connected}>
+            {isDemo ? (
+              <button className="primary-button" type="button" disabled>
+                {shouldForceStravaApproval ? t('settings.reauthorizeStrava') : t('settings.connectStrava')}
+              </button>
+            ) : (
+              <a className="primary-button" href={stravaConnectUrl(shouldForceStravaApproval)}>
+                {shouldForceStravaApproval ? t('settings.reauthorizeStrava') : t('settings.connectStrava')}
+              </a>
+            )}
+            <button className="secondary-button" type="button" disabled={isDemo || syncActive} onClick={() => startStravaSync('recent')}>{t('settings.syncRecent')}</button>
+            <button className="secondary-button" type="button" disabled={isDemo || syncActive} onClick={() => startStravaSync('history')}>{t('settings.syncHistory')}</button>
+            <button className="secondary-button" type="button" onClick={() => disconnect.mutate()} disabled={isDemo || !strava.data?.connected}>
               {t('settings.disconnect')}
             </button>
           </div>
@@ -210,11 +228,11 @@ export function SettingsPage() {
             <div className="form-grid">
               <label>
                 {t('settings.zoneSetName')}
-                <input value={zoneSetName} onChange={(event) => setZoneSetName(event.target.value)} required />
+                <input value={zoneSetName} disabled={isDemo} onChange={(event) => setZoneSetName(event.target.value)} required />
               </label>
               <label>
                 {t('settings.effectiveFrom')}
-                <input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} required />
+                <input type="date" value={effectiveFrom} disabled={isDemo} onChange={(event) => setEffectiveFrom(event.target.value)} required />
               </label>
             </div>
             <div className="hr-zone-grid">
@@ -228,6 +246,7 @@ export function SettingsPage() {
                       value={zone.min_hr}
                       min={1}
                       max={260}
+                      disabled={isDemo}
                       onChange={(event) => setZoneValue(zones, setZones, index, 'min_hr', event.target.value)}
                     />
                   </label>
@@ -238,13 +257,14 @@ export function SettingsPage() {
                       value={zone.max_hr}
                       min={1}
                       max={260}
+                      disabled={isDemo}
                       onChange={(event) => setZoneValue(zones, setZones, index, 'max_hr', event.target.value)}
                     />
                   </label>
                 </div>
               ))}
             </div>
-            <button className="primary-button" type="submit" disabled={saveHrZones.isPending}>
+            <button className="primary-button" type="submit" disabled={isDemo || saveHrZones.isPending}>
               {t('settings.saveHrZones')}
             </button>
           </form>
@@ -252,7 +272,7 @@ export function SettingsPage() {
             <button
               className="secondary-button"
               type="button"
-              disabled={recomputeHrMetrics.isPending || !hasSavedZones}
+              disabled={isDemo || recomputeHrMetrics.isPending || !hasSavedZones}
               onClick={() => recomputeHrMetrics.mutate()}
             >
               {recomputeHrMetrics.isPending ? t('settings.recalculatingIntensity') : t('settings.recalculateIntensity')}
@@ -283,13 +303,14 @@ export function SettingsPage() {
               <input
                 type="checkbox"
                 checked={elevationEnabled}
+                disabled={isDemo}
                 onChange={(event) => setElevationEnabled(event.target.checked)}
               />
               {t('settings.useGpsElevation')}
             </label>
             <label>
               {t('settings.correctionMode')}
-              <select value={elevationMode} onChange={(event) => setElevationMode(event.target.value as 'only_when_zero' | 'always')}>
+              <select value={elevationMode} disabled={isDemo} onChange={(event) => setElevationMode(event.target.value as 'only_when_zero' | 'always')}>
                 <option value="only_when_zero">{t('settings.onlyWhenZero')}</option>
                 <option value="always">{t('settings.alwaysReplace')}</option>
               </select>
@@ -299,19 +320,20 @@ export function SettingsPage() {
               <input
                 type="url"
                 value={elevationProviderUrl}
+                disabled={isDemo}
                 onChange={(event) => setElevationProviderUrl(event.target.value)}
                 placeholder="https://your-elevation-provider.example/lookup"
               />
             </label>
             <p className="helper-text">{t('settings.elevationPrivacy')}</p>
             <div className="button-row">
-              <button className="primary-button" type="submit" disabled={updatePreferences.isPending}>
+              <button className="primary-button" type="submit" disabled={isDemo || updatePreferences.isPending}>
                 {updatePreferences.isPending ? t('settings.savingElevation') : t('settings.saveElevation')}
               </button>
               <button
                 className="secondary-button"
                 type="button"
-                disabled={updatePreferences.isPending || recomputeElevation.isPending || !elevationEnabled || !elevationProviderUrl.trim()}
+                disabled={isDemo || updatePreferences.isPending || recomputeElevation.isPending || !elevationEnabled || !elevationProviderUrl.trim()}
                 onClick={() => recomputeElevation.mutate()}
               >
                 {recomputeElevation.isPending ? t('settings.recalculatingElevation') : t('settings.recalculateElevation')}
@@ -324,13 +346,21 @@ export function SettingsPage() {
           <h2>{t('settings.dataPrivacy')}</h2>
           <p>{t('settings.privacyHelp')}</p>
           <div className="button-row">
-            <a className="secondary-button" href={downloadUrl('/export/data')}>
-              <Download size={16} />
-              {t('settings.exportData')}
-            </a>
+            {isDemo ? (
+              <button className="secondary-button" type="button" disabled>
+                <Download size={16} />
+                {t('settings.exportData')}
+              </button>
+            ) : (
+              <a className="secondary-button" href={downloadUrl('/export/data')}>
+                <Download size={16} />
+                {t('settings.exportData')}
+              </a>
+            )}
             <button
               className="danger-button"
               type="button"
+              disabled={isDemo}
               onClick={async () => {
                 if (window.confirm(t('settings.deleteConfirm'))) {
                   await apiRequest<void>('/account', { method: 'DELETE' });

@@ -218,6 +218,57 @@ describe('SettingsPage', () => {
     expect(await screen.findByRole('heading', { name: /Settings/i })).toBeInTheDocument();
   });
 
+  test('disables settings mutations for demo sessions', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/auth/me')) {
+          return Promise.resolve(
+            jsonResponse({
+              id: 'demo-user-id',
+              email: 'demo@example.com',
+              display_name: 'Portfolio Demo',
+              timezone: 'Europe/Prague',
+              units: 'metric',
+              is_demo: true,
+            }),
+          );
+        }
+        if (url.includes('/connections/strava/status')) {
+          return Promise.resolve(
+            jsonResponse({
+              connected: false,
+              status: 'disconnected',
+              provider_user_id: null,
+              scopes_granted: [],
+              missing_scopes: [],
+              access_token_expires_at: null,
+              last_sync_at: null,
+              last_error: null,
+              active_job_id: null,
+            }),
+          );
+        }
+        if (url.includes('/profile/preferences')) {
+          return Promise.resolve(jsonResponse(preferencesFixture()));
+        }
+        if (url.includes('/profile/hr-zones')) {
+          return Promise.resolve(jsonResponse([]));
+        }
+        return Promise.resolve(jsonResponse({}));
+      }),
+    );
+
+    renderWithClient(<SettingsPage />);
+
+    expect(await screen.findByText(/Demo účet je pouze pro čtení/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Připojit Stravu/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Synchronizovat poslední/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Uložit tepové zóny/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Exportovat data/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Smazat účet/i })).toBeDisabled();
+  });
+
   test('saves heart-rate zones from profile settings', async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url.includes('/connections/strava/status')) {

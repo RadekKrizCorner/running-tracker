@@ -223,6 +223,40 @@ describe('AppShell', () => {
     expect(await screen.findByText(/Lehký běh 7 km/i)).toBeInTheDocument();
   });
 
+  test('shows demo badge and disables shell mutation controls for demo sessions', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/notifications/summary')) {
+          return Promise.resolve(jsonResponse({ unread_count: 1 }));
+        }
+        if (url.includes('/notifications')) {
+          return Promise.resolve(jsonResponse([notificationFixture]));
+        }
+        return Promise.resolve(jsonResponse(responseForAppShellUrl(url)));
+      }),
+    );
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <AppShell user={{ id: 'u1', email: 'demo@example.com', display_name: 'Portfolio Demo', timezone: 'Europe/Prague', units: 'metric', is_demo: true }}>
+            <div>Page content</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText(/^Demo$/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Upravit profilovou ikonu/i })).toBeDisabled();
+    await userEvent.click(await screen.findByRole('button', { name: /Notifikace/i }));
+
+    const panel = screen.getByRole('dialog', { name: /Notifikace/i });
+    expect(within(panel).queryByRole('button', { name: /Označit vše jako přečtené/i })).not.toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /Odstranit/i })).toBeDisabled();
+  });
+
   test('shows multiple today sessions in the sidebar route card', async () => {
     const today = toIsoDate(new Date());
     vi.stubGlobal(

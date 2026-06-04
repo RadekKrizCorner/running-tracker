@@ -85,6 +85,7 @@ export function AppShell({ user, children }: AppShellProps) {
   const currentAvatarIcon = avatarIconById(preferences.data?.avatar_icon);
   const selectedIcon = avatarIconById(selectedAvatarIcon);
   const selectedImage = safeAvatarImage(selectedAvatarImage);
+  const isDemo = Boolean(user?.is_demo);
 
   useEffect(() => {
     if (preferences.data?.locale) {
@@ -130,7 +131,12 @@ export function AppShell({ user, children }: AppShellProps) {
             className="brand-mark brand-avatar-button"
             type="button"
             aria-label={t('profile.editAvatar')}
-            onClick={() => setAvatarOpen(true)}
+            disabled={isDemo}
+            onClick={() => {
+              if (!isDemo) {
+                setAvatarOpen(true);
+              }
+            }}
           >
             {currentAvatarImage ? (
               <img src={currentAvatarImage} alt="" />
@@ -143,6 +149,7 @@ export function AppShell({ user, children }: AppShellProps) {
           <div>
             <strong>{t('app.name')}</strong>
             <span>{user?.email}</span>
+            {isDemo ? <span className="status-pill warning">{t('demo.badge')}</span> : null}
           </div>
           <div className="brand-actions">
             <button
@@ -159,7 +166,7 @@ export function AppShell({ user, children }: AppShellProps) {
               <div className="notification-popover" role="dialog" aria-label={t('notifications.title')}>
                 <div className="notification-popover-header">
                   <strong>{t('notifications.title')}</strong>
-                  {unreadCount > 0 ? (
+                  {unreadCount > 0 && !isDemo ? (
                     <button className="text-button" type="button" onClick={() => markAllNotificationsRead.mutate()}>
                       {t('notifications.markAllRead')}
                     </button>
@@ -174,7 +181,7 @@ export function AppShell({ user, children }: AppShellProps) {
                           to={notification.action_url ?? '/dashboard'}
                           onClick={() => {
                             setNotificationsOpen(false);
-                            if (!notification.read_at) {
+                            if (!notification.read_at && !isDemo) {
                               markNotificationRead.mutate(notification.id);
                             }
                           }}
@@ -185,9 +192,13 @@ export function AppShell({ user, children }: AppShellProps) {
                         <button
                           aria-label={t('notifications.delete')}
                           className="notification-delete-button"
-                          disabled={deleteNotification.isPending}
+                          disabled={isDemo || deleteNotification.isPending}
                           type="button"
-                          onClick={() => deleteNotification.mutate(notification.id)}
+                          onClick={() => {
+                            if (!isDemo) {
+                              deleteNotification.mutate(notification.id);
+                            }
+                          }}
                         >
                           <Trash2 size={15} />
                         </button>
