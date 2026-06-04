@@ -33,7 +33,8 @@ describe('LoginPage', () => {
     );
 
     expect(screen.getByRole('heading', { name: /Přihlášení/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Vyzkoušet demo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Use demo account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Nastavit heslo vlastníka/i })).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText(/E-mail/i), 'owner@example.com');
     await userEvent.type(screen.getByLabelText(/Heslo/i), 'passwordpassword');
     await userEvent.click(screen.getByRole('button', { name: /Přihlásit/i }));
@@ -57,7 +58,8 @@ describe('LoginPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: /Přihlášení/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Vyzkoušet demo/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Use demo account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /Nastavit heslo vlastníka/i })).not.toBeInTheDocument();
   });
 
   test('starts a demo session from the demo button', async () => {
@@ -87,7 +89,7 @@ describe('LoginPage', () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(await screen.findByRole('button', { name: /Vyzkoušet demo/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /Use demo account/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/auth/demo-login'),

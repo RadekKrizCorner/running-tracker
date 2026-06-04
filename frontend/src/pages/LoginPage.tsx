@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuthOptions, useDemoLogin, useLogin } from '../features/auth/api';
 import { ApiError } from '../lib/api/client';
 import { useTranslation } from '../lib/i18n';
@@ -60,7 +60,6 @@ export function LoginPage() {
             {demoLogin.isPending ? t('auth.loggingIn') : t('auth.tryDemo')}
           </button>
         ) : null}
-        <Link to="/setup">{t('auth.setupLink')}</Link>
       </form>
     </main>
   );
