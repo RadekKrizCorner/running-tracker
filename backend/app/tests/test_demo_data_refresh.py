@@ -108,6 +108,35 @@ def test_refresh_demo_account_does_not_touch_owner_data(client, monkeypatch: pyt
         assert session.scalar(select(User).where(User.id == owner.id, User.is_demo.is_(False))) is not None
 
 
+def test_refresh_demo_account_removes_stale_demo_provider_connections(client, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify demo refresh removes stale provider connections from the demo account."""
+    _ = client
+    settings = _demo_settings(monkeypatch)
+
+    from app.services.demo_data_service import refresh_demo_account
+
+    with get_session_factory()() as session:
+        demo = User(email="demo@example.com", display_name="Portfolio Demo", is_demo=True, password_hash="stale")
+        session.add(demo)
+        session.flush()
+        session.add(
+            ProviderConnection(
+                user_id=demo.id,
+                provider="strava",
+                provider_user_id="demo-strava",
+                access_token_encrypted="stale-access-token",
+                refresh_token_encrypted="stale-refresh-token",
+            )
+        )
+        session.commit()
+
+        refresh_demo_account(session, settings, today=date(2026, 6, 4), history_weeks=4)
+
+        refreshed_demo = session.scalar(select(User).where(User.email == "demo@example.com"))
+        assert refreshed_demo is not None
+        assert session.scalar(select(ProviderConnection).where(ProviderConnection.user_id == refreshed_demo.id)) is None
+
+
 def _demo_settings(monkeypatch: pytest.MonkeyPatch):
     """Return settings with demo account enabled."""
     monkeypatch.setenv("DEMO_ACCOUNT_ENABLED", "true")
