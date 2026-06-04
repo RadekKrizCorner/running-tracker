@@ -93,6 +93,34 @@ python -m app.db.cleanup_seed
 
 The cleanup removes only seed activities with `manual` provider IDs starting with `seed-`, sample planned workouts, and the sample shoes.
 
+## Portfolio Demo Account
+
+The portfolio demo is optional and disabled by default. It creates a separate public read-only demo profile with generated training data, no Strava connection, and no copied real GPS tracks.
+
+Set these values in `.env` for a portfolio deployment:
+
+```bash
+DEMO_ACCOUNT_ENABLED=true
+DEMO_ACCOUNT_EMAIL=demo@example.com
+DEMO_ACCOUNT_PASSWORD=replace-with-a-long-demo-password
+DEMO_ACCOUNT_DISPLAY_NAME="Portfolio Demo"
+DEMO_REFRESH_ENABLED=true
+DEMO_REFRESH_INTERVAL_SECONDS=86400
+DEMO_REFRESH_FROM_OWNER_PATTERNS=true
+DEMO_REFRESH_HISTORY_WEEKS=78
+```
+
+Refresh the demo data manually after migrations or whenever you want to rebuild the fictional profile:
+
+```bash
+cd backend
+python -m app.db.refresh_demo_account --from-owner-patterns --weeks 78
+```
+
+Use `--synthetic-only` to ignore owner aggregate patterns and generate only from built-in defaults. The refresh command creates or updates the demo user, clears generated records for that demo user only, creates rolling activities, streams, plans, events, gear, and weekly metrics, and leaves the real owner account untouched.
+
+For production portfolio use, keep the scheduler container running with `DEMO_REFRESH_ENABLED=true`. The existing scheduler loop refreshes demo data once per `DEMO_REFRESH_INTERVAL_SECONDS`, normally daily, so the demo keeps recent completed runs and future plans without a separate paid service.
+
 ## Planning
 
 The Plans page is a manual weekly scheduler. Pick a week, name the week plan, assign workouts from reusable templates, or enter custom workouts directly. The page shows live planned distance, planned time, estimated planned load, and non-rest session count before saving. The Dashboard compares completed training against the planned week and includes previous/current/next week controls for reviewing nearby weeks.
@@ -231,6 +259,7 @@ Docker Compose starts the worker and scheduler automatically. Set `STRAVA_AUTO_S
 - This is a single-owner app.
 - Strava access and refresh tokens are stored only on the backend and encrypted at rest with an authenticated application secret.
 - GPS tracks, heart rate, timestamps, subjective notes, and OAuth tokens are treated as sensitive data.
+- Portfolio demo data is fictional and generated for a separate read-only account. The demo does not receive provider tokens or copied real GPS tracks.
 - Export excludes provider tokens.
 - Account deletion removes local app data and does not delete data from Strava.
 

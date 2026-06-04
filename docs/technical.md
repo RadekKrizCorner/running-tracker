@@ -28,7 +28,7 @@ The frontend is a React application created with Vite. `frontend/src/app/provide
 - `redis`: Redis 7 for RQ jobs.
 - `api`: FastAPI with Alembic migrations before startup.
 - `worker`: RQ worker for background jobs.
-- `scheduler`: periodic Strava sync enqueue loop.
+- `scheduler`: periodic Strava sync enqueue loop and optional daily portfolio demo refresh.
 - `frontend`: Vite dev server in local compose, Nginx static frontend in prod compose.
 
 ## Configuration
@@ -45,6 +45,8 @@ Important values:
 - `REDIS_URL`
 - `STRAVA_CLIENT_ID`, `STRAVA_CLIENT_SECRET`, `STRAVA_REDIRECT_URI`, `STRAVA_SCOPES`
 - `STRAVA_AUTO_SYNC_ENABLED`, `STRAVA_AUTO_SYNC_INTERVAL_SECONDS`
+- `DEMO_ACCOUNT_ENABLED`, `DEMO_ACCOUNT_EMAIL`, `DEMO_ACCOUNT_PASSWORD`, `DEMO_ACCOUNT_DISPLAY_NAME`
+- `DEMO_REFRESH_ENABLED`, `DEMO_REFRESH_INTERVAL_SECONDS`, `DEMO_REFRESH_FROM_OWNER_PATTERNS`, `DEMO_REFRESH_HISTORY_WEEKS`
 - `VITE_API_BASE_URL`, `VITE_BASE_PATH`
 
 Production cookies become secure when `APP_ENV=production` and `APP_BASE_URL` starts with `https://`.
@@ -53,9 +55,11 @@ Production cookies become secure when `APP_ENV=production` and `APP_BASE_URL` st
 
 Authentication uses a signed session token stored in an HTTP-only cookie. Passwords use PBKDF2-SHA256 with per-password salt. Session tokens are HMAC-SHA256 signed JSON payloads with `sub`, `exp`, and `typ=session`.
 
-`backend/app/api/deps.py` resolves the authenticated owner from the session cookie and exposes `CurrentUser`. Routes that accept `CurrentUser` are owner-authenticated. Queries are expected to filter by `user.id` or use a service helper that does.
+`backend/app/api/deps.py` resolves the authenticated account from the session cookie and exposes `CurrentUser`. Routes that accept `CurrentUser` are authenticated. Queries are expected to filter by `user.id` or use a service helper that does.
 
 First-run setup uses `OWNER_EMAIL` as the allowed email. If an owner already has a password, setup is rejected.
+
+The optional portfolio demo account is represented by `users.is_demo=true`. `POST /auth/demo-login` creates or updates the configured demo account and starts a demo session when `DEMO_ACCOUNT_ENABLED=true` and a demo password is configured. Demo sessions can read demo-scoped data but cannot mutate data. `backend/app/api/deps.py` exposes `WritableUser`, which rejects demo users with `403 DEMO_READ_ONLY`; write endpoints use this dependency while read endpoints continue to use `CurrentUser`.
 
 ## Backend Module Catalog
 
@@ -74,7 +78,7 @@ First-run setup uses `OWNER_EMAIL` as the allowed email. If an owner already has
 
 ### Owner And Preferences
 
-- `users`: single owner account with email, password hash, display name, timezone, units, timestamps.
+- `users`: owner and optional demo account records with email, password hash, display name, timezone, units, `is_demo`, and timestamps.
 - `user_preferences`: locale, dashboard mode, favorite/recent template IDs, pace zones, elevation correction settings, avatar icon, and uploaded avatar data URL.
 
 ### Provider Integration
@@ -110,12 +114,14 @@ First-run setup uses `OWNER_EMAIL` as the allowed email. If an owner already has
 
 ## API Inventory
 
-All routes below are under `/api/v1` unless noted. All routes require owner auth except setup/login/logout and `/health`.
+All routes below are under `/api/v1` unless noted. All routes require authentication except setup/login/demo-login/logout and `/health`.
 
 ### Auth
 
 - `POST /auth/setup-owner`: set first owner password and create session.
+- `GET /auth/options`: return public auth options such as demo login availability.
 - `POST /auth/login`: authenticate and set session.
+- `POST /auth/demo-login`: start the configured public read-only demo session when enabled.
 - `POST /auth/logout`: clear session.
 - `GET /auth/me`: return current owner.
 - `POST /auth/change-password`: change password after verifying current password.
@@ -270,6 +276,17 @@ RQ queue name is `running-tracker`.
 
 The scheduler enqueues recent Strava syncs for connected owners without active sync jobs. The interval is clamped between 60 seconds and 6 hours, so automatic sync runs at least four times per day when enabled.
 
+When `DEMO_REFRESH_ENABLED=true`, the same scheduler process also runs `refresh_demo_account()` after `DEMO_REFRESH_INTERVAL_SECONDS` has elapsed. Portfolio deployments should run exactly one scheduler process so the demo refresh remains daily and Strava sync scheduling is not duplicated.
+
+The manual demo refresh entrypoint is:
+
+```bash
+cd backend
+python -m app.db.refresh_demo_account --from-owner-patterns --weeks 78
+```
+
+`--synthetic-only` ignores owner aggregate patterns. The refresh service creates the demo user if needed, removes generated demo records for that user only, generates fictional capital-city routes, activities, streams, HR zones, gear, plans, events, and weekly metrics, and never creates provider connections or provider tokens for the demo account.
+
 Job progress is sanitized to whitelisted fields before exposure: phase, imported, skipped, streams, current activity, started timestamp, and updated timestamp.
 
 ## Elevation Correction
@@ -316,7 +333,7 @@ Routes:
 
 Feature API modules define TanStack Query hooks:
 
-- `features/auth/api.ts`: owner setup, login, logout, current owner.
+- `features/auth/api.ts`: owner setup, login, demo login, logout, current account.
 - `features/connections/api.ts`: Strava status, sync, sync job polling, disconnect, connect URL, cache invalidation.
 - `features/dashboard/api.ts`: dashboard payload.
 - `features/activities/api.ts`: list/detail/streams/splits/notes.
@@ -338,7 +355,7 @@ Feature API modules define TanStack Query hooks:
 - `TrendsPage`: trend charts, recent balance, durability, personal records, coach-effect signals.
 - `HeatmapPage`: route density map and range filters.
 - `SettingsPage`: display preferences, language, Strava controls, HR zones, recalculation, elevation, export/delete, avatar.
-- `LoginPage` and `SetupPage`: auth forms.
+- `LoginPage` and `SetupPage`: auth forms, including a demo login action when the backend enables it.
 
 ### Shared Components
 
@@ -372,6 +389,7 @@ Migration history:
 - `202605170002_notifications.py`: notifications.
 - `202605210001_avatar_preferences.py`: avatar icon and uploaded avatar image.
 - `202605220001_planned_workout_sessions.py`: planned workout session labels and sort order.
+- `202606040001_demo_account.py`: demo account flag on users.
 
 The app also calls `Base.metadata.create_all()` on startup for local personal-deployment convenience, but migrations remain the explicit schema history.
 
@@ -380,6 +398,7 @@ The app also calls `Base.metadata.create_all()` on startup for local personal-de
 Backend tests are under `backend/app/tests` and use pytest. Coverage includes:
 
 - auth setup/login/logout/password changes
+- demo login, demo read-only guards, and demo data refresh
 - CORS origins
 - crypto
 - activity listing/details/notes/splits
@@ -414,6 +433,7 @@ python -m venv .venv
 alembic upgrade head
 python -m app.db.seed_dev
 python -m app.db.cleanup_seed
+python -m app.db.refresh_demo_account --from-owner-patterns --weeks 78
 python -m app.jobs.worker
 python -m app.jobs.scheduler
 ```

@@ -1,10 +1,10 @@
 # API Notes
 
-All application endpoints are prefixed with `/api/v1` and require owner authentication unless they are auth setup/login/logout or health.
+All application endpoints are prefixed with `/api/v1` and require authentication unless they are auth setup/login/demo-login/logout or health. The optional portfolio demo session is public but read-only.
 
 Core groups:
 
-- `/auth/*` owner setup, login, logout, self, and password changes.
+- `/auth/*` owner setup, login, demo login, logout, self, and password changes.
 - `/connections/strava/*` OAuth, status, sync, sync job status, and disconnect.
 - `/activities/*` activity list/detail with HR zone breakdown, streams, notes, gear assignment, and splits.
 - `/analytics/*` dashboard, weekly metrics, yearly running summary, recent dense weekly metrics, detailed trend metrics, load, intensity, aerobic trend, PRs, and GPS route heatmap.
@@ -21,6 +21,23 @@ Errors use:
 {
   "detail": "Human-readable message",
   "code": "MACHINE_READABLE_CODE"
+}
+```
+
+Demo write attempts return:
+
+```json
+{
+  "detail": "Demo account is read-only",
+  "code": "DEMO_READ_ONLY"
+}
+```
+
+`GET /api/v1/auth/options` is public and returns whether the portfolio demo login should be shown:
+
+```json
+{
+  "demo_enabled": true
 }
 ```
 
