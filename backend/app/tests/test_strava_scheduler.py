@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.core.crypto import encrypt_secret
 from app.db.session import get_session_factory
 from app.models import ProviderConnection, User
+from app.services.demo_data_service import DemoRefreshResult
 from app.tests.conftest import setup_and_login
 
 
@@ -93,6 +95,46 @@ def test_scheduler_interval_is_capped_to_four_times_daily() -> None:
     assert scheduler.scheduler_interval_seconds(10) == 60
     assert scheduler.scheduler_interval_seconds(60 * 60 * 24) == 60 * 60 * 6
     assert scheduler.scheduler_interval_seconds(60 * 30) == 60 * 30
+
+
+def test_scheduler_runs_demo_refresh_when_enabled(client, monkeypatch) -> None:
+    """Verify the scheduler refreshes demo data on the configured interval."""
+    import app.jobs.scheduler as scheduler
+
+    _ = client
+    monkeypatch.setenv("DEMO_ACCOUNT_ENABLED", "true")
+    monkeypatch.setenv("DEMO_ACCOUNT_EMAIL", "demo@example.com")
+    monkeypatch.setenv("DEMO_ACCOUNT_PASSWORD", "demo password")
+    monkeypatch.setenv("DEMO_REFRESH_ENABLED", "true")
+    monkeypatch.setenv("DEMO_REFRESH_INTERVAL_SECONDS", "86400")
+    get_settings.cache_clear()
+    calls: list[str] = []
+
+    def fake_refresh_demo_account(session, settings) -> DemoRefreshResult:
+        """Record demo refresh calls without generating data."""
+        assert session is not None
+        calls.append(settings.demo_account_email)
+        return DemoRefreshResult(
+            activities=1,
+            streams=7,
+            planned_workouts=1,
+            events=1,
+            gear=1,
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 4),
+        )
+
+    monkeypatch.setattr(scheduler, "refresh_demo_account", fake_refresh_demo_account)
+    monkeypatch.setattr(scheduler, "_last_demo_refresh_at", None)
+
+    first = scheduler.run_periodic_demo_refresh_once(datetime(2026, 6, 4, 8, 0, tzinfo=UTC))
+    second = scheduler.run_periodic_demo_refresh_once(datetime(2026, 6, 4, 9, 0, tzinfo=UTC))
+    third = scheduler.run_periodic_demo_refresh_once(datetime(2026, 6, 5, 8, 1, tzinfo=UTC))
+
+    assert first is True
+    assert second is False
+    assert third is True
+    assert calls == ["demo@example.com", "demo@example.com"]
 
 
 def _create_strava_connection(client, status: str) -> str:
