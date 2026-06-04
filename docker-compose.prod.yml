@@ -1,0 +1,72 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: running
+      POSTGRES_PASSWORD: running
+      POSTGRES_DB: running_tracker
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U running -d running_tracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    ports:
+      - "${API_PORT:-8009}:8009"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8009 --workers 2"
+
+  worker:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    command: python -m app.jobs.worker
+
+  scheduler:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      worker:
+        condition: service_started
+    command: python -m app.jobs.scheduler
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8009/api/v1}
+        VITE_BASE_PATH: ${VITE_BASE_PATH:-/}
+    ports:
+      - "${FRONTEND_PORT:-5173}:8080"
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

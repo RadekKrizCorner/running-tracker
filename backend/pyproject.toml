@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "running-tracker-backend"
+version = "0.1.0"
+description = "Personal running tracker backend"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.13.2",
+  "CairoSVG>=2.7.1",
+  "cryptography==42.0.8",
+  "fastapi>=0.115.0",
+  "httpx>=0.27.0",
+  "email-validator>=2.2.0",
+  "psycopg[binary]>=3.2.0",
+  "pydantic-settings>=2.4.0",
+  "python-multipart>=0.0.9",
+  "redis>=5.0.8",
+  "rq>=1.16.2",
+  "sqlalchemy>=2.0.32",
+  "uvicorn[standard]>=0.30.6",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.3.2",
+  "pytest-asyncio>=0.23.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["app/tests"]
+pythonpath = ["."]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"

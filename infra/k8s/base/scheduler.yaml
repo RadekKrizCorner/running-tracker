@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: running-tracker-scheduler
+  labels:
+    app.kubernetes.io/name: running-tracker-scheduler
+    app.kubernetes.io/component: scheduler
+    app.kubernetes.io/part-of: running-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: running-tracker-scheduler
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: running-tracker-scheduler
+        app.kubernetes.io/component: scheduler
+        app.kubernetes.io/part-of: running-tracker
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: running-tracker-secret
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: running-tracker-secret
+                  key: POSTGRES_DB
+          command:
+            - sh
+            - -c
+            - until pg_isready -h postgres -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do sleep 2; done
+        - name: wait-for-migrations
+          image: running-tracker-backend:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -c
+            - |
+              import time
+
+              from alembic.config import Config
+              from alembic.runtime.migration import MigrationContext
+              from alembic.script import ScriptDirectory
+              from sqlalchemy import create_engine
+
+              from app.core.config import get_settings
+
+              config = Config("alembic.ini")
+              expected_heads = set(ScriptDirectory.from_config(config).get_heads())
+              engine = create_engine(get_settings().database_url)
+
+              while True:
+                  try:
+                      with engine.connect() as connection:
+                          current_heads = set(MigrationContext.configure(connection).get_current_heads())
+                      if current_heads == expected_heads:
+                          break
+                      print(
+                          f"Waiting for Alembic migrations: current={sorted(current_heads)} expected={sorted(expected_heads)}",
+                          flush=True,
+                      )
+                  except Exception as exc:
+                      print(f"Waiting for Alembic migrations: {exc}", flush=True)
+                  time.sleep(2)
+          envFrom:
+            - configMapRef:
+                name: running-tracker-config
+            - secretRef:
+                name: running-tracker-secret
+        - name: wait-for-redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - until redis-cli -h redis ping; do sleep 2; done
+      containers:
+        - name: scheduler
+          image: running-tracker-backend:local
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -m
+            - app.jobs.scheduler
+          envFrom:
+            - configMapRef:
+                name: running-tracker-config
+            - secretRef:
+                name: running-tracker-secret
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
