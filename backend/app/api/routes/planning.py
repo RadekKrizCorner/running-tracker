@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Response
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, WritableUser
 from app.core.exceptions import AppException
 from app.core.time import end_of_day, local_date, start_of_day
 from app.models import Activity, CalendarEvent, Event, PlannedWorkout, TrainingPlan
@@ -61,21 +61,21 @@ def calendar(session: DbSession, user: CurrentUser, start_date: date, end_date: 
 
 
 @router.post("/calendar/week", response_model=CalendarResponse)
-def replace_calendar_week(payload: WeekScheduleRequest, session: DbSession, user: CurrentUser) -> CalendarResponse:
+def replace_calendar_week(payload: WeekScheduleRequest, session: DbSession, user: WritableUser) -> CalendarResponse:
     """Replace one week of owner planned workouts."""
     replace_week_schedule(session, user, payload)
     return _calendar_response(session, user, payload.week_start_date, payload.week_start_date + timedelta(days=6))
 
 
 @router.post("/calendar/week/copy", response_model=CalendarResponse)
-def copy_calendar_week(payload: WeekCopyRequest, session: DbSession, user: CurrentUser) -> CalendarResponse:
+def copy_calendar_week(payload: WeekCopyRequest, session: DbSession, user: WritableUser) -> CalendarResponse:
     """Copy one owner week into another week."""
     copy_week_schedule(session, user, payload)
     return _calendar_response(session, user, payload.target_week_start_date, payload.target_week_start_date + timedelta(days=6))
 
 
 @router.post("/calendar/events", response_model=CalendarEventRead)
-def create_calendar_event(payload: CalendarEventCreate, session: DbSession, user: CurrentUser) -> CalendarEventRead:
+def create_calendar_event(payload: CalendarEventCreate, session: DbSession, user: WritableUser) -> CalendarEventRead:
     """Create a custom owner calendar event."""
     event = CalendarEvent(user_id=user.id, **payload.model_dump())
     session.add(event)
@@ -89,7 +89,7 @@ def update_calendar_event(
     event_id: UUID,
     payload: CalendarEventUpdate,
     session: DbSession,
-    user: CurrentUser,
+    user: WritableUser,
 ) -> CalendarEventRead:
     """Update a custom owner calendar event."""
     event = _get_calendar_event_for_user(session, user.id, event_id)
@@ -101,7 +101,7 @@ def update_calendar_event(
 
 
 @router.delete("/calendar/events/{event_id}", status_code=204)
-def delete_calendar_event(event_id: UUID, session: DbSession, user: CurrentUser) -> Response:
+def delete_calendar_event(event_id: UUID, session: DbSession, user: WritableUser) -> Response:
     """Delete a custom owner calendar event."""
     event = _get_calendar_event_for_user(session, user.id, event_id)
     session.delete(event)
@@ -119,7 +119,7 @@ def get_workout_templates(session: DbSession, user: CurrentUser) -> list[Workout
 def post_workout_template(
     payload: WorkoutTemplateCreate,
     session: DbSession,
-    user: CurrentUser,
+    user: WritableUser,
 ) -> WorkoutTemplateRead:
     """Create a reusable workout template."""
     return WorkoutTemplateRead.model_validate(create_workout_template(session, user, payload))
@@ -130,14 +130,14 @@ def patch_workout_template(
     template_id: UUID,
     payload: WorkoutTemplateUpdate,
     session: DbSession,
-    user: CurrentUser,
+    user: WritableUser,
 ) -> WorkoutTemplateRead:
     """Update a reusable workout template."""
     return WorkoutTemplateRead.model_validate(update_workout_template(session, user, template_id, payload))
 
 
 @router.delete("/workout-templates/{template_id}", status_code=204)
-def remove_workout_template(template_id: UUID, session: DbSession, user: CurrentUser) -> Response:
+def remove_workout_template(template_id: UUID, session: DbSession, user: WritableUser) -> Response:
     """Delete a reusable workout template."""
     delete_workout_template(session, user, template_id)
     return Response(status_code=204)
@@ -153,7 +153,7 @@ def get_workout_pool(session: DbSession, user: CurrentUser) -> list[WorkoutPoolI
 def post_workout_pool_item(
     payload: WorkoutPoolItemCreate,
     session: DbSession,
-    user: CurrentUser,
+    user: WritableUser,
 ) -> WorkoutPoolItemRead:
     """Create an unscheduled workout pool item."""
     return WorkoutPoolItemRead.model_validate(create_workout_pool_item(session, user, payload))
@@ -170,14 +170,14 @@ def patch_workout_pool_item(
     pool_item_id: UUID,
     payload: WorkoutPoolItemUpdate,
     session: DbSession,
-    user: CurrentUser,
+    user: WritableUser,
 ) -> WorkoutPoolItemRead:
     """Update one owner workout pool item."""
     return WorkoutPoolItemRead.model_validate(update_workout_pool_item(session, user, pool_item_id, payload))
 
 
 @router.delete("/workout-pool/{pool_item_id}", status_code=204)
-def remove_workout_pool_item(pool_item_id: UUID, session: DbSession, user: CurrentUser) -> Response:
+def remove_workout_pool_item(pool_item_id: UUID, session: DbSession, user: WritableUser) -> Response:
     """Delete one owner workout pool item."""
     delete_workout_pool_item(session, user, pool_item_id)
     return Response(status_code=204)
@@ -188,7 +188,7 @@ def schedule_pool_item(
     pool_item_id: UUID,
     payload: SchedulePoolItemRequest,
     session: DbSession,
-    user: CurrentUser,
+    user: WritableUser,
 ) -> PlannedWorkoutRead:
     """Schedule one owner workout pool item."""
     return PlannedWorkoutRead.model_validate(schedule_workout_pool_item(session, user, pool_item_id, payload))
@@ -318,7 +318,7 @@ def _validate_planned_workout_references(session: DbSession, user: CurrentUser, 
 
 
 @router.post("/planned-workouts", response_model=PlannedWorkoutRead)
-def create_workout(payload: PlannedWorkoutCreate, session: DbSession, user: CurrentUser) -> PlannedWorkoutRead:
+def create_workout(payload: PlannedWorkoutCreate, session: DbSession, user: WritableUser) -> PlannedWorkoutRead:
     """Create a planned workout."""
     data = payload.model_dump()
     _validate_planned_workout_references(session, user, data)
@@ -337,7 +337,7 @@ def get_workout(workout_id: UUID, session: DbSession, user: CurrentUser) -> Plan
 
 
 @router.patch("/planned-workouts/{workout_id}", response_model=PlannedWorkoutRead)
-def update_workout(workout_id: UUID, payload: PlannedWorkoutUpdate, session: DbSession, user: CurrentUser) -> PlannedWorkoutRead:
+def update_workout(workout_id: UUID, payload: PlannedWorkoutUpdate, session: DbSession, user: WritableUser) -> PlannedWorkoutRead:
     """Update a planned workout."""
     workout = get_workout_for_user(session, user.id, workout_id)
     updates = payload.model_dump(exclude_unset=True)
@@ -352,7 +352,7 @@ def update_workout(workout_id: UUID, payload: PlannedWorkoutUpdate, session: DbS
 
 
 @router.delete("/planned-workouts/{workout_id}", status_code=204)
-def delete_workout(workout_id: UUID, session: DbSession, user: CurrentUser) -> Response:
+def delete_workout(workout_id: UUID, session: DbSession, user: WritableUser) -> Response:
     """Delete a planned workout."""
     workout = get_workout_for_user(session, user.id, workout_id)
     session.delete(workout)
@@ -361,7 +361,7 @@ def delete_workout(workout_id: UUID, session: DbSession, user: CurrentUser) -> R
 
 
 @router.post("/plans/generate", response_model=PlanPreview)
-def generate_plan(payload: PlanGenerateRequest, session: DbSession, user: CurrentUser) -> PlanPreview:
+def generate_plan(payload: PlanGenerateRequest, session: DbSession, user: WritableUser) -> PlanPreview:
     """Generate and persist a draft plan."""
     return create_generated_plan(session, user, payload)
 
@@ -388,7 +388,7 @@ def get_plan(plan_id: UUID, session: DbSession, user: CurrentUser) -> PlanPrevie
 
 
 @router.patch("/plans/{plan_id}", response_model=TrainingPlanRead)
-def update_plan(plan_id: UUID, payload: dict, session: DbSession, user: CurrentUser) -> TrainingPlanRead:
+def update_plan(plan_id: UUID, payload: dict, session: DbSession, user: WritableUser) -> TrainingPlanRead:
     """Update editable plan fields."""
     plan = session.scalar(select(TrainingPlan).where(TrainingPlan.id == plan_id, TrainingPlan.user_id == user.id))
     if plan is None:
@@ -402,7 +402,7 @@ def update_plan(plan_id: UUID, payload: dict, session: DbSession, user: CurrentU
 
 
 @router.post("/plans/{plan_id}/activate", response_model=TrainingPlanRead)
-def activate_plan(plan_id: UUID, session: DbSession, user: CurrentUser) -> TrainingPlanRead:
+def activate_plan(plan_id: UUID, session: DbSession, user: WritableUser) -> TrainingPlanRead:
     """Activate a plan."""
     plan = session.scalar(select(TrainingPlan).where(TrainingPlan.id == plan_id, TrainingPlan.user_id == user.id))
     if plan is None:
@@ -414,7 +414,7 @@ def activate_plan(plan_id: UUID, session: DbSession, user: CurrentUser) -> Train
 
 
 @router.post("/plans/{plan_id}/archive", response_model=TrainingPlanRead)
-def archive_plan(plan_id: UUID, session: DbSession, user: CurrentUser) -> TrainingPlanRead:
+def archive_plan(plan_id: UUID, session: DbSession, user: WritableUser) -> TrainingPlanRead:
     """Archive a plan."""
     plan = session.scalar(select(TrainingPlan).where(TrainingPlan.id == plan_id, TrainingPlan.user_id == user.id))
     if plan is None:

@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Response
 from sqlalchemy import select
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, WritableUser
 from app.models import Gear
 from app.schemas.gear import GearCreate, GearRead, GearUpdate
 from app.services.gear_service import gear_response, get_gear_for_user
@@ -21,7 +21,7 @@ def list_gear(session: DbSession, user: CurrentUser) -> list[GearRead]:
 
 
 @router.post("", response_model=GearRead)
-def create_gear(payload: GearCreate, session: DbSession, user: CurrentUser) -> GearRead:
+def create_gear(payload: GearCreate, session: DbSession, user: WritableUser) -> GearRead:
     """Create gear."""
     gear = Gear(user_id=user.id, **payload.model_dump())
     session.add(gear)
@@ -37,7 +37,7 @@ def get_gear(gear_id: UUID, session: DbSession, user: CurrentUser) -> GearRead:
 
 
 @router.patch("/{gear_id}", response_model=GearRead)
-def update_gear(gear_id: UUID, payload: GearUpdate, session: DbSession, user: CurrentUser) -> GearRead:
+def update_gear(gear_id: UUID, payload: GearUpdate, session: DbSession, user: WritableUser) -> GearRead:
     """Update gear."""
     gear = get_gear_for_user(session, user.id, gear_id)
     for key, value in payload.model_dump(exclude_unset=True).items():
@@ -48,7 +48,7 @@ def update_gear(gear_id: UUID, payload: GearUpdate, session: DbSession, user: Cu
 
 
 @router.delete("/{gear_id}", status_code=204)
-def delete_gear(gear_id: UUID, session: DbSession, user: CurrentUser) -> Response:
+def delete_gear(gear_id: UUID, session: DbSession, user: WritableUser) -> Response:
     """Delete gear."""
     gear = get_gear_for_user(session, user.id, gear_id)
     session.delete(gear)
@@ -69,4 +69,3 @@ def gear_activities(gear_id: UUID, session: DbSession, user: CurrentUser) -> lis
         }
         for activity in gear.activities
     ]
-

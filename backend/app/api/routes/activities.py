@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query, Response
 from sqlalchemy import and_, case, select
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, WritableUser
 from app.analytics.intensity import calculate_heart_rate_zone_breakdown
 from app.core.time import end_of_day, local_date, start_of_day
 from app.models import Activity, ActivityStream, Gear, User
@@ -83,7 +83,7 @@ def get_activity(activity_id: UUID, session: DbSession, user: CurrentUser) -> Ac
 
 
 @router.patch("/{activity_id}", response_model=ActivityRead)
-def update_activity(activity_id: UUID, payload: ActivityUpdate, session: DbSession, user: CurrentUser) -> ActivityRead:
+def update_activity(activity_id: UUID, payload: ActivityUpdate, session: DbSession, user: WritableUser) -> ActivityRead:
     """Update editable activity fields."""
     activity = get_activity_for_user(session, user.id, activity_id)
     for key, value in payload.model_dump(exclude_unset=True).items():
@@ -110,7 +110,7 @@ def get_splits(activity_id: UUID, session: DbSession, user: CurrentUser) -> dict
 
 
 @router.put("/{activity_id}/notes", response_model=ActivityNoteRead)
-def put_notes(activity_id: UUID, payload: ActivityNoteWrite, session: DbSession, user: CurrentUser) -> ActivityNoteRead:
+def put_notes(activity_id: UUID, payload: ActivityNoteWrite, session: DbSession, user: WritableUser) -> ActivityNoteRead:
     """Create or update activity notes."""
     activity = get_activity_for_user(session, user.id, activity_id)
     note = save_note(session, activity, payload.model_dump(exclude_unset=True))
@@ -119,7 +119,7 @@ def put_notes(activity_id: UUID, payload: ActivityNoteWrite, session: DbSession,
 
 
 @router.post("/{activity_id}/gear/{gear_id}", response_model=ActivityRead)
-def add_activity_gear(activity_id: UUID, gear_id: UUID, session: DbSession, user: CurrentUser) -> ActivityRead:
+def add_activity_gear(activity_id: UUID, gear_id: UUID, session: DbSession, user: WritableUser) -> ActivityRead:
     """Assign gear to an activity."""
     activity = get_activity_for_user(session, user.id, activity_id)
     gear = get_gear_for_user(session, user.id, gear_id)
@@ -127,7 +127,7 @@ def add_activity_gear(activity_id: UUID, gear_id: UUID, session: DbSession, user
 
 
 @router.delete("/{activity_id}/gear/{gear_id}", status_code=204)
-def remove_activity_gear(activity_id: UUID, gear_id: UUID, session: DbSession, user: CurrentUser) -> Response:
+def remove_activity_gear(activity_id: UUID, gear_id: UUID, session: DbSession, user: WritableUser) -> Response:
     """Remove gear from an activity."""
     activity = get_activity_for_user(session, user.id, activity_id)
     gear = get_gear_for_user(session, user.id, gear_id)

@@ -17,7 +17,7 @@ def create_database() -> None:
 def ensure_owner(session: Session) -> User:
     """Ensure the single owner account exists."""
     settings = get_settings()
-    user = session.scalar(select(User).order_by(User.created_at).limit(1))
+    user = session.scalar(select(User).where(User.is_demo.is_(False)).order_by(User.created_at).limit(1))
     if user is not None:
         return user
     user = User(email=settings.owner_email, display_name="Runner")
@@ -25,4 +25,3 @@ def ensure_owner(session: Session) -> User:
     session.commit()
     session.refresh(user)
     return user
-

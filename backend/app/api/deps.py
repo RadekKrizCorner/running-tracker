@@ -32,5 +32,12 @@ def get_current_user(
     return user
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+def get_writable_user(user: "CurrentUser") -> User:
+    """Return the authenticated user if the account can mutate data."""
+    if user.is_demo:
+        raise AppException(403, "DEMO_READ_ONLY", "Demo account is read-only")
+    return user
 
+
+CurrentUser = Annotated[User, Depends(get_current_user)]
+WritableUser = Annotated[User, Depends(get_writable_user)]

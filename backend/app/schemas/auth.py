@@ -11,6 +11,7 @@ class UserRead(BaseModel):
     id: UUID
     email: EmailStr
     display_name: str | None = None
+    is_demo: bool = False
     timezone: str
     units: str
 
@@ -36,4 +37,3 @@ class ChangePasswordRequest(BaseModel):
 
     current_password: str = Field(min_length=1)
     new_password: str = Field(min_length=10)
-

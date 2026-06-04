@@ -5,7 +5,7 @@ import secrets
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import CurrentUser, DbSession, SettingsDep
+from app.api.deps import CurrentUser, DbSession, SettingsDep, WritableUser
 from app.core.config import Settings
 from app.core.exceptions import AppException
 from app.jobs.queue import STRAVA_SYNC_TASKS, enqueue_task, find_active_owner_job, get_job_status
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/connections/strava", tags=["strava"])
 
 @router.get("/start")
 def start_strava_connection(
-    user: CurrentUser,
+    user: WritableUser,
     settings: SettingsDep,
     force: bool = Query(default=False),
 ) -> RedirectResponse:
@@ -43,7 +43,7 @@ def start_strava_connection(
 def strava_callback(
     request: Request,
     session: DbSession,
-    user: CurrentUser,
+    user: WritableUser,
     settings: SettingsDep,
     code: str | None = Query(default=None),
     state: str | None = Query(default=None),
@@ -93,7 +93,7 @@ def strava_status(session: DbSession, user: CurrentUser, settings: SettingsDep) 
 
 
 @router.post("/sync", response_model=SyncResponse)
-def sync_strava(payload: SyncRequest, session: DbSession, user: CurrentUser) -> SyncResponse:
+def sync_strava(payload: SyncRequest, session: DbSession, user: WritableUser) -> SyncResponse:
     """Queue a Strava sync for the owner."""
     get_strava_connection(session, user.id)
     try:
@@ -120,7 +120,7 @@ def strava_sync_job_status(job_id: str, user: CurrentUser) -> SyncJobStatusRespo
 
 
 @router.post("/disconnect", response_model=StravaStatusResponse)
-def disconnect_strava_endpoint(session: DbSession, user: CurrentUser, settings: SettingsDep) -> StravaStatusResponse:
+def disconnect_strava_endpoint(session: DbSession, user: WritableUser, settings: SettingsDep) -> StravaStatusResponse:
     """Disconnect Strava and clear local tokens."""
     connection = disconnect_strava(session, user.id)
     return StravaStatusResponse(

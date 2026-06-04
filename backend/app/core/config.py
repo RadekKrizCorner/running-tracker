@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     ai_posters_enabled: bool = False
     strava_auto_sync_enabled: bool = True
     strava_auto_sync_interval_seconds: int = 60 * 60 * 6
+    demo_account_enabled: bool = False
+    demo_account_email: str = "demo@example.com"
+    demo_account_password: str = ""
+    demo_account_display_name: str = "Portfolio Demo"
+    demo_refresh_enabled: bool = False
+    demo_refresh_interval_seconds: int = 60 * 60 * 24
+    demo_refresh_from_owner_patterns: bool = True
+    demo_refresh_history_weeks: int = 78
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

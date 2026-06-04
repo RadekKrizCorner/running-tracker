@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, WritableUser
 from app.schemas.profile import (
     ElevationRecomputeResponse,
     HeartRateRecomputeResponse,
@@ -30,13 +30,13 @@ def get_hr_zones(session: DbSession, user: CurrentUser) -> list[HeartRateZoneSet
 
 
 @router.post("/hr-zones", response_model=HeartRateZoneSetRead)
-def post_hr_zones(payload: HeartRateZoneSetCreate, session: DbSession, user: CurrentUser) -> HeartRateZoneSetRead:
+def post_hr_zones(payload: HeartRateZoneSetCreate, session: DbSession, user: WritableUser) -> HeartRateZoneSetRead:
     """Create or replace one dated heart-rate zone set."""
     return HeartRateZoneSetRead.model_validate(create_hr_zone_set(session, user, payload))
 
 
 @router.post("/hr-zones/recompute", response_model=HeartRateRecomputeResponse)
-def post_hr_zones_recompute(session: DbSession, user: CurrentUser) -> HeartRateRecomputeResponse:
+def post_hr_zones_recompute(session: DbSession, user: WritableUser) -> HeartRateRecomputeResponse:
     """Recalculate HR-based load and intensity for imported activities."""
     return HeartRateRecomputeResponse(**recompute_user_hr_metrics(session, user.id))
 
@@ -48,12 +48,12 @@ def get_preferences(session: DbSession, user: CurrentUser) -> UserPreferenceRead
 
 
 @router.patch("/preferences", response_model=UserPreferenceRead)
-def patch_preferences(payload: UserPreferenceUpdate, session: DbSession, user: CurrentUser) -> UserPreferenceRead:
+def patch_preferences(payload: UserPreferenceUpdate, session: DbSession, user: WritableUser) -> UserPreferenceRead:
     """Update owner UI preferences."""
     return UserPreferenceRead.model_validate(update_user_preferences(session, user, payload))
 
 
 @router.post("/elevation/recompute", response_model=ElevationRecomputeResponse)
-def post_elevation_recompute(session: DbSession, user: CurrentUser) -> ElevationRecomputeResponse:
+def post_elevation_recompute(session: DbSession, user: WritableUser) -> ElevationRecomputeResponse:
     """Recalculate GPS-based elevation for imported activities."""
     return ElevationRecomputeResponse(**recompute_user_elevation_metrics(session, user))

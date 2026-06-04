@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from fastapi import APIRouter, Response
 
-from app.api.deps import CurrentUser, DbSession, SettingsDep
+from app.api.deps import CurrentUser, DbSession, SettingsDep, WritableUser
 from app.core.security import create_session_token
 from app.schemas.auth import ChangePasswordRequest, LoginRequest, SetupOwnerRequest, UserRead
-from app.services.auth_service import authenticate_owner, change_password, setup_owner
+from app.services.auth_service import authenticate_demo_account, authenticate_owner, change_password, setup_owner
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -30,15 +32,15 @@ def setup_owner_endpoint(payload: SetupOwnerRequest, response: Response, session
 def login_endpoint(payload: LoginRequest, response: Response, session: DbSession, settings: SettingsDep) -> UserRead:
     """Log in the owner and set the session cookie."""
     user = authenticate_owner(session, payload.email, payload.password)
-    token = create_session_token(user.id)
-    response.set_cookie(
-        settings.session_cookie_name,
-        token,
-        httponly=True,
-        secure=settings.secure_cookies,
-        samesite="lax",
-        max_age=settings.session_max_age_seconds,
-    )
+    _set_session_cookie(response, user.id, settings)
+    return UserRead.model_validate(user)
+
+
+@router.post("/demo-login", response_model=UserRead)
+def demo_login_endpoint(response: Response, session: DbSession, settings: SettingsDep) -> UserRead:
+    """Log in to the configured portfolio demo account."""
+    user = authenticate_demo_account(session, settings)
+    _set_session_cookie(response, user.id, settings)
     return UserRead.model_validate(user)
 
 
@@ -57,7 +59,20 @@ def me_endpoint(user: CurrentUser) -> UserRead:
 
 
 @router.post("/change-password", status_code=204)
-def change_password_endpoint(payload: ChangePasswordRequest, session: DbSession, user: CurrentUser) -> Response:
+def change_password_endpoint(payload: ChangePasswordRequest, session: DbSession, user: WritableUser) -> Response:
     """Change the authenticated owner password."""
     change_password(session, user, payload.current_password, payload.new_password)
     return Response(status_code=204)
+
+
+def _set_session_cookie(response: Response, user_id: UUID, settings: SettingsDep) -> None:
+    """Set the signed session cookie for a user."""
+    token = create_session_token(user_id)
+    response.set_cookie(
+        settings.session_cookie_name,
+        token,
+        httponly=True,
+        secure=settings.secure_cookies,
+        samesite="lax",
+        max_age=settings.session_max_age_seconds,
+    )

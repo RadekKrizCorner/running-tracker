@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Query, Response
 
-from app.api.deps import CurrentUser, DbSession
+from app.api.deps import CurrentUser, DbSession, WritableUser
 from app.schemas.notification import NotificationRead, NotificationSummary
 from app.services.notification_service import (
     delete_notification,
@@ -35,19 +35,19 @@ def get_notification_summary(session: DbSession, user: CurrentUser) -> Notificat
 
 
 @router.post("/{notification_id}/read", response_model=NotificationRead)
-def post_notification_read(notification_id: UUID, session: DbSession, user: CurrentUser) -> NotificationRead:
+def post_notification_read(notification_id: UUID, session: DbSession, user: WritableUser) -> NotificationRead:
     """Mark one notification as read."""
     return NotificationRead.model_validate(mark_notification_read(session, user, notification_id))
 
 
 @router.post("/read-all")
-def post_notifications_read_all(session: DbSession, user: CurrentUser) -> dict[str, int]:
+def post_notifications_read_all(session: DbSession, user: WritableUser) -> dict[str, int]:
     """Mark all notifications as read."""
     return {"updated": mark_all_notifications_read(session, user)}
 
 
 @router.delete("/{notification_id}", status_code=204)
-def delete_notification_endpoint(notification_id: UUID, session: DbSession, user: CurrentUser) -> Response:
+def delete_notification_endpoint(notification_id: UUID, session: DbSession, user: WritableUser) -> Response:
     """Delete one notification."""
     delete_notification(session, user, notification_id)
     return Response(status_code=204)
