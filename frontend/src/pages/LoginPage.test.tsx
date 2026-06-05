@@ -33,7 +33,7 @@ describe('LoginPage', () => {
     );
 
     expect(screen.getByRole('heading', { name: /Přihlášení/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Use demo account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Vyzkoušet demo/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Nastavit heslo vlastníka/i })).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText(/E-mail/i), 'owner@example.com');
     await userEvent.type(screen.getByLabelText(/Heslo/i), 'passwordpassword');
@@ -58,7 +58,7 @@ describe('LoginPage', () => {
     );
 
     expect(await screen.findByRole('heading', { name: /Přihlášení/i })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Use demo account/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Vyzkoušet demo/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /Nastavit heslo vlastníka/i })).not.toBeInTheDocument();
   });
 
@@ -89,12 +89,29 @@ describe('LoginPage', () => {
       </QueryClientProvider>,
     );
 
-    await userEvent.click(await screen.findByRole('button', { name: /Use demo account/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /Vyzkoušet demo/i }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('/auth/demo-login'),
       expect.objectContaining({ method: 'POST', credentials: 'include' }),
     );
+  });
+
+  test('explains the demo account when demo login is enabled', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ demo_enabled: true })));
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <LoginPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText('Portfolio Demo')).toBeInTheDocument();
+    expect(screen.getByText(/vygenerovanými běžeckými daty/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bez hesla/i)).toBeInTheDocument();
   });
 });
 

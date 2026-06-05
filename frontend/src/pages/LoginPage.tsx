@@ -47,18 +47,26 @@ export function LoginPage() {
           {login.isPending ? t('auth.loggingIn') : t('auth.loginButton')}
         </button>
         {authOptions.data?.demo_enabled ? (
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={demoLogin.isPending}
-            onClick={() => {
-              demoLogin.mutate(undefined, {
-                onSuccess: () => navigate('/dashboard'),
-              });
-            }}
-          >
-            {demoLogin.isPending ? t('auth.loggingIn') : t('auth.tryDemo')}
-          </button>
+          <section className="demo-login-section" aria-label={t('auth.demoAccountLabel')}>
+            <div className="demo-login-copy">
+              <p className="demo-login-kicker">{t('demo.badge')}</p>
+              <h2>{t('auth.demoAccountName')}</h2>
+              <p>{t('auth.demoAccountDescription')}</p>
+              <p className="demo-login-note">{t('auth.demoAccountAccess')}</p>
+            </div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={demoLogin.isPending}
+              onClick={() => {
+                demoLogin.mutate(undefined, {
+                  onSuccess: () => navigate('/dashboard'),
+                });
+              }}
+            >
+              {demoLogin.isPending ? t('auth.loggingIn') : t('auth.tryDemo')}
+            </button>
+          </section>
         ) : null}
       </form>
     </main>

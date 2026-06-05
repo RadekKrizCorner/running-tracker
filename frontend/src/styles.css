@@ -1349,6 +1349,48 @@ label {
   font-weight: 720;
 }
 
+.demo-login-section {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.demo-login-copy {
+  display: grid;
+  gap: 6px;
+}
+
+.demo-login-kicker,
+.demo-login-copy h2,
+.demo-login-copy p {
+  margin: 0;
+}
+
+.demo-login-kicker {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.demo-login-copy h2 {
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.demo-login-copy p {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.demo-login-copy .demo-login-note {
+  color: var(--text);
+  font-weight: 760;
+}
+
 .landing-page {
   overflow: hidden;
   background: #f4f7f3;
