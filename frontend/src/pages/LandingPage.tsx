@@ -1,5 +1,5 @@
-import { Activity, BarChart3, CalendarDays, CheckCircle2, LockKeyhole, Map, Route, ShieldCheck, TrendingUp, Trophy } from 'lucide-react';
-import type { ComponentType } from 'react';
+import { Activity, BarChart3, CalendarDays, CheckCircle2, Github, LockKeyhole, Map, Route, ShieldCheck, TrendingUp, Trophy } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import heroRunner from '../assets/landing/landing-hero-runner.webp';
 import routeHeatmap from '../assets/landing/landing-route-heatmap.webp';
@@ -7,7 +7,7 @@ import trainingPlan from '../assets/landing/landing-training-plan.webp';
 import { useTranslation } from '../lib/i18n';
 
 type LandingFeature = {
-  icon: ComponentType<{ size?: number; strokeWidth?: number }>;
+  icon: LucideIcon;
   titleKey: string;
   detailKey: string;
 };
@@ -72,7 +72,7 @@ const planRows: LandingRow[] = [
 ];
 
 export function LandingPage() {
-  const { t } = useTranslation();
+  const { locale, setLocale, t } = useTranslation();
 
   return (
     <main className="landing-page">
@@ -89,7 +89,37 @@ export function LandingPage() {
             <a href="#planning">{t('landing.navPlanning')}</a>
             <a href="#privacy">{t('landing.navPrivacy')}</a>
           </nav>
-          <Link className="landing-login-link" to="/login">{t('auth.loginButton')}</Link>
+          <div className="landing-header-actions">
+            <div className="landing-language-switch" role="group" aria-label={t('common.language')}>
+              <button
+                className={locale === 'cs-CZ' ? 'active' : ''}
+                type="button"
+                aria-pressed={locale === 'cs-CZ'}
+                onClick={() => setLocale('cs-CZ')}
+              >
+                CZ
+              </button>
+              <button
+                className={locale === 'en-US' ? 'active' : ''}
+                type="button"
+                aria-pressed={locale === 'en-US'}
+                onClick={() => setLocale('en-US')}
+              >
+                EN
+              </button>
+            </div>
+            <a
+              className="landing-icon-link"
+              href="https://github.com/RadekKrizCorner/running-tracker"
+              aria-label={t('landing.githubRepository')}
+              title={t('landing.githubRepository')}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Github size={18} strokeWidth={2.2} aria-hidden="true" />
+            </a>
+            <Link className="landing-login-link" to="/login">{t('auth.loginButton')}</Link>
+          </div>
         </header>
 
         <div className="landing-hero-content">
@@ -97,7 +127,6 @@ export function LandingPage() {
           <p>{t('landing.heroText')}</p>
           <div className="landing-hero-actions">
             <Link className="primary-button landing-primary-cta" to="/login">{t('landing.primaryCta')}</Link>
-            <Link className="secondary-button landing-secondary-cta" to="/setup">{t('landing.secondaryCta')}</Link>
           </div>
           <dl className="landing-proof-list" aria-label={t('landing.proofLabel')}>
             <div>
