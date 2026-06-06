@@ -189,6 +189,71 @@ export type YearlyRunningSummary = {
   moving_time_s: number;
 };
 
+export type ReportValues = {
+  program?: string;
+  title?: string;
+  week?: string;
+  main_distance?: string;
+  main_unit?: string;
+  main_label?: string;
+  completion_percent?: number;
+  stats?: {
+    runs?: string;
+    time?: string;
+    plan_vs_actual?: string;
+    longest_run?: string;
+    avg_pace?: string;
+    training_adherence?: string;
+  };
+  volume?: {
+    planned?: number;
+    actual?: number;
+    difference?: number;
+  };
+  summary_lines?: string[];
+  went_well?: string[];
+  focus_next?: string[];
+  footer?: string[];
+  [key: string]: unknown;
+};
+
+export type ReportTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  format: string;
+  theme: Record<string, unknown>;
+  sections: Array<Record<string, unknown>>;
+  field_defaults: ReportValues;
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReportTemplatePayload = Omit<ReportTemplate, 'id' | 'created_at' | 'updated_at'>;
+
+export type ReportPrefillResponse = {
+  template_id: string | null;
+  period_start: string;
+  period_end: string;
+  values: ReportValues;
+};
+
+export type ReportRenderPayload = {
+  values: ReportValues;
+};
+
+export type GeneratedReport = {
+  id: string;
+  template_id: string | null;
+  title: string;
+  period_start: string;
+  period_end: string;
+  values: ReportValues;
+  created_at: string;
+  updated_at: string;
+};
+
 export type AerobicTrendPoint = {
   date: string;
   pace_s_per_km: number;

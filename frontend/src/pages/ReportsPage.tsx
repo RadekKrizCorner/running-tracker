@@ -1,5 +1,6 @@
 import { CalendarDays, Download, FileText, Image as ImageIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { ReportGenerator } from '../components/reports/ReportGenerator';
 import { useYearlyRunningSummary } from '../features/analytics/api';
 import type { YearlyRunningSummary } from '../lib/api/types';
 import { downloadUrl } from '../lib/api/client';
@@ -61,6 +62,10 @@ export function ReportsPage() {
         isLoading={yearlySummary.isLoading}
         isError={yearlySummary.isError}
         onYearChange={setYear}
+      />
+      <ReportGenerator
+        weekStart={weekStart}
+        onWeekStartChange={(value) => setWeekStart(value ? weekStartIso(value) : '')}
       />
       <section className="reports-grid" aria-label={t('reports.availableReports')}>
         {reportDefinitions.map((report) => {
