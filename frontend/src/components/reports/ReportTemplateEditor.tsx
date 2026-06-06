@@ -21,7 +21,12 @@ export function ReportTemplateEditor({ values, onChange, disabled = false }: Rep
     onChange((current) => ({ ...current, stats: { ...(current.stats ?? {}), [key]: value } }));
   };
   const updateVolume = (key: keyof NonNullable<ReportValues['volume']>, value: number) => {
-    onChange((current) => ({ ...current, volume: { ...(current.volume ?? {}), [key]: value } }));
+    onChange((current) => {
+      const nextVolume = { ...(current.volume ?? {}), [key]: value };
+      const planned = numberValue(nextVolume.planned);
+      const actual = numberValue(nextVolume.actual);
+      return { ...current, volume: { ...nextVolume, difference: volumeDifference(planned, actual) } };
+    });
   };
 
   return (
@@ -261,4 +266,9 @@ function clampedNumber(value: string, min?: number, max?: number) {
     next = Math.min(max, next);
   }
   return next;
+}
+
+function volumeDifference(planned: number, actual: number) {
+  const difference = Math.round((actual - planned) * 10) / 10;
+  return Object.is(difference, -0) ? 0 : difference;
 }

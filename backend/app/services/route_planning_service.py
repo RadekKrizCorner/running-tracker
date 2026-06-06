@@ -13,6 +13,7 @@ from app.schemas.route_planning import (
 
 MALFORMED_PROVIDER_DETAIL = "Routing provider returned an unusable response."
 UNUSABLE_CANDIDATES_DETAIL = "Routing provider returned only unusable or out-of-range route candidates."
+OUT_OF_AREA_DETAIL = "Route start point is outside the configured route suggestion area."
 
 
 def suggest_loop_routes(
@@ -30,6 +31,8 @@ def suggest_loop_routes(
         return _unavailable("Valhalla URL is not configured.")
     if request.target_distance_m > settings.route_suggestion_max_distance_m:
         return _unavailable("Requested route distance is above the configured local routing limit.")
+    if not _start_inside_configured_area(settings, request):
+        return _unavailable(OUT_OF_AREA_DETAIL)
 
     capped_request = request.model_copy(update={"candidate_count": min(request.candidate_count, 6)})
     try:
@@ -74,3 +77,12 @@ def _is_usable_candidate(candidate: RouteCandidate, request: RouteSuggestionRequ
     minimum_distance = request.target_distance_m - request.distance_tolerance_m
     maximum_distance = request.target_distance_m + request.distance_tolerance_m
     return minimum_distance <= candidate.distance_m <= maximum_distance
+
+
+def _start_inside_configured_area(settings: Settings, request: RouteSuggestionRequest) -> bool:
+    """Return whether the route start is inside configured route bounds."""
+    min_lat = min(settings.route_suggestion_min_lat, settings.route_suggestion_max_lat)
+    max_lat = max(settings.route_suggestion_min_lat, settings.route_suggestion_max_lat)
+    min_lng = min(settings.route_suggestion_min_lng, settings.route_suggestion_max_lng)
+    max_lng = max(settings.route_suggestion_min_lng, settings.route_suggestion_max_lng)
+    return min_lat <= request.start_lat <= max_lat and min_lng <= request.start_lng <= max_lng

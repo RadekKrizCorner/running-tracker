@@ -177,6 +177,27 @@ def test_route_suggestion_service_returns_unavailable_when_provider_returns_no_c
     assert response.candidates == []
 
 
+def test_route_suggestion_service_rejects_start_outside_configured_area(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify route suggestions stay inside the configured routing area."""
+    from app.core.config import Settings
+    from app.schemas.route_planning import RouteSuggestionRequest
+    from app.services import route_planning_service
+
+    def raise_if_called(_base_url: str, _request: RouteSuggestionRequest) -> list[RouteCandidate]:
+        """Fail when provider is called for an out-of-area request."""
+        raise AssertionError("provider should not be called")
+
+    monkeypatch.setattr(route_planning_service, "request_valhalla_loop_routes", raise_if_called)
+    settings = Settings(routing_enabled=True, valhalla_base_url="http://valhalla.test")
+    request = RouteSuggestionRequest(**{**_route_request_payload(), "start_lat": 52.52, "start_lng": 13.405})
+
+    response = route_planning_service.suggest_loop_routes(settings, uuid4(), request)
+
+    assert response.status == "unavailable"
+    assert "outside the configured route suggestion area" in response.detail
+    assert response.candidates == []
+
+
 def test_route_suggestion_service_rejects_out_of_tolerance_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify route suggestions reject candidates outside the requested distance range."""
     from app.core.config import Settings

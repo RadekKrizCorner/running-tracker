@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     routing_provider: str = "valhalla"
     valhalla_base_url: str | None = None
     route_suggestion_max_distance_m: int = 50000
+    route_suggestion_min_lat: float = 48.5
+    route_suggestion_max_lat: float = 51.1
+    route_suggestion_min_lng: float = 12.0
+    route_suggestion_max_lng: float = 18.9
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

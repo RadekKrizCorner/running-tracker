@@ -51,7 +51,7 @@ The response includes countdown/phase, target pace, recent 4-week distance/load/
 
 ## Route Suggestions
 
-`POST /api/v1/routes/suggest-loop` requires an authenticated owner session. It does not store route suggestions. The backend calls the configured local routing provider only when `ROUTING_ENABLED=true` and `VALHALLA_BASE_URL` is set.
+`POST /api/v1/routes/suggest-loop` requires an authenticated owner session. It does not store route suggestions. The backend calls the configured local routing provider only when `ROUTING_ENABLED=true`, `VALHALLA_BASE_URL` is set, and the start point is inside the configured route suggestion bounds. The default bounds cover the Czech Republic.
 
 Request:
 

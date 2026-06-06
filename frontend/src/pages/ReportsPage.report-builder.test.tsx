@@ -99,7 +99,7 @@ describe('ReportsPage report builder', () => {
       expect(body.values.main_unit).toBe('mi');
       expect(body.values.main_label).toBe('trailový objem');
       expect(body.values.completion_percent).toBe(75);
-      expect(body.values.volume).toMatchObject({ planned: 40, actual: 30 });
+      expect(body.values.volume).toMatchObject({ planned: 40, actual: 30, difference: -10 });
       expect(body.values.footer).toEqual(['trail', 'síla']);
       expect(body.template.theme).toBeDefined();
     });

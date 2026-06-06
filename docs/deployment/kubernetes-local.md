@@ -109,7 +109,7 @@ Edit `infra/k8s/overlays/local/secret.env` and set:
 
 - `OWNER_EMAIL`
 - `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`, if you want to test Strava OAuth
-- `ROUTING_ENABLED`, `ROUTING_PROVIDER`, `VALHALLA_BASE_URL`, and `ROUTE_SUGGESTION_MAX_DISTANCE_M`, if you run a local Valhalla service
+- `ROUTING_ENABLED`, `ROUTING_PROVIDER`, `VALHALLA_BASE_URL`, `ROUTE_SUGGESTION_MAX_DISTANCE_M`, and `ROUTE_SUGGESTION_*` bounds, if you run a local Valhalla service
 
 For local Kubernetes, the Strava callback URL is:
 
@@ -117,7 +117,7 @@ For local Kubernetes, the Strava callback URL is:
 http://localhost:8009/api/v1/connections/strava/callback
 ```
 
-Optional route suggestions use self-hosted Valhalla. For V1, keep routing data scoped to the Czech Republic to control disk and memory use. Run Valhalla separately, expose it to the API container or cluster network, set `ROUTING_ENABLED=true`, and point `VALHALLA_BASE_URL` at that service. If Valhalla is absent, leave routing disabled; app startup and all non-routing workflows continue normally.
+Optional route suggestions use self-hosted Valhalla. For V1, keep routing data scoped to the Czech Republic to control disk and memory use. The backend also rejects start points outside the configured `ROUTE_SUGGESTION_MIN/MAX_LAT/LNG` bounds, which default to the Czech Republic. Run Valhalla separately, expose it to the API container or cluster network, set `ROUTING_ENABLED=true`, and point `VALHALLA_BASE_URL` at that service. If Valhalla is absent, leave routing disabled; app startup and all non-routing workflows continue normally.
 
 ## 4. Render And Apply Manifests
 

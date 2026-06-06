@@ -191,6 +191,25 @@ def test_report_render_uses_template_theme_and_section_labels(client: TestClient
     assert "Next targets" in response.text
 
 
+def test_report_render_recomputes_volume_difference(client: TestClient) -> None:
+    """Verify report rendering derives volume difference from edited values."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={
+            "values": {
+                "title": "Edited volume report",
+                "volume": {"planned": 40, "actual": 30, "difference": 999},
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    assert "-10,0 km" in response.text
+    assert "+999,0 km" not in response.text
+
+
 def test_saved_report_api_is_owner_scoped(client: TestClient) -> None:
     """Verify saved report API creates owner reports and hides foreign reports."""
     from app.db.session import get_session_factory

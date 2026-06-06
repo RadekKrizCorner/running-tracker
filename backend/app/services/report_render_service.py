@@ -42,6 +42,7 @@ def render_report_svg(values: dict[str, Any], template: dict[str, Any] | None = 
     progress = _number(values.get("completion_percent"), 0, min_value=0, max_value=100)
     planned = _number(volume.get("planned"), 0, min_value=0)
     actual = _number(volume.get("actual"), 0, min_value=0)
+    difference = _volume_difference(planned, actual)
     planned_width, actual_width = _volume_widths(planned, actual)
     return f"""<svg width="{REPORT_WIDTH}" height="{REPORT_HEIGHT}" viewBox="0 0 {REPORT_WIDTH} {REPORT_HEIGHT}" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
@@ -92,7 +93,7 @@ def render_report_svg(values: dict[str, Any], template: dict[str, Any] | None = 
 
   <rect x="70" y="1420" width="940" height="220" rx="34" class="card"/>
   <text x="118" y="1490" class="font section">{_svg_text(section_labels["volume"])}</text>
-  <text x="804" y="1490" class="font metric">{_svg_text(_signed_km(volume.get("difference", 0)))}</text>
+  <text x="804" y="1490" class="font metric">{_svg_text(_signed_km(difference))}</text>
   <text x="118" y="1560" class="font tiny">Plán</text>
   <rect x="250" y="1532" width="610" height="32" rx="16" fill="{theme["stroke"]}"/>
   <rect x="250" y="1532" width="{planned_width}" height="32" rx="16" fill="{theme["muted"]}"/>
@@ -207,6 +208,11 @@ def _volume_widths(planned: float, actual: float) -> tuple[int, int]:
     actual = _number(actual, 0, min_value=0)
     max_value = max(planned, actual, 1)
     return round(610 * planned / max_value), round(610 * actual / max_value)
+
+
+def _volume_difference(planned: float, actual: float) -> float:
+    """Return actual-minus-planned volume difference."""
+    return round(_number(actual, 0, min_value=0) - _number(planned, 0, min_value=0), 1)
 
 
 def _number(

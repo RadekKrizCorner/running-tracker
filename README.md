@@ -74,9 +74,13 @@ ROUTING_ENABLED=true
 ROUTING_PROVIDER=valhalla
 VALHALLA_BASE_URL=http://localhost:8002
 ROUTE_SUGGESTION_MAX_DISTANCE_M=50000
+ROUTE_SUGGESTION_MIN_LAT=48.5
+ROUTE_SUGGESTION_MAX_LAT=51.1
+ROUTE_SUGGESTION_MIN_LNG=12.0
+ROUTE_SUGGESTION_MAX_LNG=18.9
 ```
 
-The frontend never calls Valhalla directly. If Valhalla is not configured or unavailable, the app remains usable and the route endpoint returns an `unavailable` response.
+The default route suggestion bounds cover the Czech Republic. The frontend never calls Valhalla directly. If Valhalla is not configured, unavailable, or a start point falls outside the configured bounds, the app remains usable and the route endpoint returns an `unavailable` response.
 
 Local Czech Republic Valhalla setup uses free OpenStreetMap data and local routing infrastructure. One practical setup is:
 
