@@ -12,6 +12,7 @@ import { LandingPage } from '../pages/LandingPage';
 import { LoginPage } from '../pages/LoginPage';
 import { PlansPage } from '../pages/PlansPage';
 import { ReportsPage } from '../pages/ReportsPage';
+import { RouteExplorerPage } from '../pages/RouteExplorerPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { SetupPage } from '../pages/SetupPage';
 import { TrendsPage } from '../pages/TrendsPage';
@@ -39,6 +40,7 @@ function ProtectedRoutes() {
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:eventId" element={<EventDetailPage />} />
         <Route path="/heatmap" element={<HeatmapPage />} />
+        <Route path="/routes" element={<RouteExplorerPage />} />
         <Route path="/plans" element={<PlansPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/trends" element={<TrendsPage />} />

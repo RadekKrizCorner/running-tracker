@@ -9,6 +9,7 @@ import {
   LogOut,
   Map,
   MoreHorizontal,
+  Route,
   Settings,
   Trash2,
   Trophy,
@@ -46,6 +47,7 @@ const navItems = [
   { to: '/plans', labelKey: 'nav.plans', icon: Dumbbell },
   { to: '/reports', labelKey: 'nav.reports', icon: FileText },
   { to: '/heatmap', labelKey: 'nav.heatmap', icon: Map },
+  { to: '/routes', labelKey: 'nav.routes', icon: Route },
   { to: '/trends', labelKey: 'nav.trends', icon: BarChart3 },
   { to: '/settings', labelKey: 'nav.settings', icon: Settings },
 ];
