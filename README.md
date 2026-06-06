@@ -78,6 +78,21 @@ ROUTE_SUGGESTION_MAX_DISTANCE_M=50000
 
 The frontend never calls Valhalla directly. If Valhalla is not configured or unavailable, the app remains usable and the route endpoint returns an `unavailable` response.
 
+Local Czech Republic Valhalla setup uses free OpenStreetMap data and local routing infrastructure. One practical setup is:
+
+1. Download `czech-republic-latest.osm.pbf` from Geofabrik's Europe/Czech Republic extract.
+2. Install or run Valhalla locally, then build tiles from that PBF into a local tile directory and extract:
+
+   ```bash
+   valhalla_build_config --mjolnir-tile-dir ./valhalla_tiles --mjolnir-tile-extract ./valhalla_tiles.tar > valhalla.json
+   valhalla_build_tiles -c valhalla.json czech-republic-latest.osm.pbf
+   valhalla_service valhalla.json 1
+   ```
+
+3. Confirm the local service responds on its route endpoint, then set `VALHALLA_BASE_URL` to that local service URL.
+
+Docker-based Valhalla images can be used instead of a native install, but image environment variables differ by maintainer. Keep the PBF, generated tiles, and service bound to local storage/networking for personal use.
+
 ### Portfolio Demo Account
 
 The demo account is public and read-only. Its data is generated separately from the real owner account, using safe aggregate patterns where configured and synthetic routes around recognizable public city areas. It does not copy provider tokens, real GPS tracks, private notes, or real event details.

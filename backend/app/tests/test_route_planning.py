@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
@@ -7,6 +8,9 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.tests.conftest import setup_and_login
+
+if TYPE_CHECKING:
+    from app.schemas.route_planning import RouteCandidate
 
 
 def test_route_suggestion_request_validates_bounds() -> None:
@@ -171,6 +175,133 @@ def test_route_suggestion_service_returns_unavailable_when_provider_returns_no_c
     assert response.status == "unavailable"
     assert response.detail == "Routing provider returned no route candidates."
     assert response.candidates == []
+
+
+def test_route_suggestion_service_rejects_out_of_tolerance_candidates(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify route suggestions reject candidates outside the requested distance range."""
+    from app.core.config import Settings
+    from app.schemas.route_planning import RouteSuggestionRequest
+    from app.services import route_planning_service
+
+    candidate = _route_candidate(distance_m=16000, geometry=[(50.0755, 14.4378), (50.08, 14.44)])
+    monkeypatch.setattr(route_planning_service, "request_valhalla_loop_routes", lambda _base_url, _request: [candidate])
+    settings = Settings(routing_enabled=True, valhalla_base_url="http://valhalla.test")
+    request = RouteSuggestionRequest(**_route_request_payload())
+
+    response = route_planning_service.suggest_loop_routes(settings, uuid4(), request)
+
+    assert response.status == "unavailable"
+    assert "unusable or out-of-range" in response.detail
+    assert response.candidates == []
+
+
+def test_route_suggestion_service_returns_unavailable_for_malformed_provider_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify malformed provider payloads return unavailable route suggestions."""
+    from app.core.config import Settings
+    from app.schemas.route_planning import RouteSuggestionRequest
+    from app.services import route_planning_service
+
+    def raise_malformed_payload(_base_url: str, _request: RouteSuggestionRequest) -> list[object]:
+        """Raise a provider normalization error."""
+        raise ValueError("bad provider json")
+
+    monkeypatch.setattr(route_planning_service, "request_valhalla_loop_routes", raise_malformed_payload)
+    settings = Settings(routing_enabled=True, valhalla_base_url="http://valhalla.test")
+    request = RouteSuggestionRequest(**_route_request_payload())
+
+    response = route_planning_service.suggest_loop_routes(settings, uuid4(), request)
+
+    assert response.status == "unavailable"
+    assert response.detail == "Routing provider returned an unusable response."
+    assert response.candidates == []
+
+
+def test_route_suggestion_service_ignores_empty_geometry_and_zero_distance_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify route suggestions ignore candidates without usable route data."""
+    from app.core.config import Settings
+    from app.schemas.route_planning import RouteSuggestionRequest
+    from app.services import route_planning_service
+
+    candidates = [
+        _route_candidate(distance_m=12000, geometry=[]),
+        _route_candidate(distance_m=0, geometry=[(50.0755, 14.4378), (50.08, 14.44)]),
+    ]
+    monkeypatch.setattr(route_planning_service, "request_valhalla_loop_routes", lambda _base_url, _request: candidates)
+    settings = Settings(routing_enabled=True, valhalla_base_url="http://valhalla.test")
+    request = RouteSuggestionRequest(**_route_request_payload())
+
+    response = route_planning_service.suggest_loop_routes(settings, uuid4(), request)
+
+    assert response.status == "unavailable"
+    assert "unusable or out-of-range" in response.detail
+    assert response.candidates == []
+
+
+def test_valhalla_request_wraps_bad_json_as_provider_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify invalid provider JSON becomes a routing provider error."""
+    from app.core.exceptions import AppException
+    from app.providers.routing import valhalla
+    from app.schemas.route_planning import RouteSuggestionRequest
+
+    class BadJsonResponse:
+        """Represent a Valhalla response with invalid JSON."""
+
+        def raise_for_status(self) -> None:
+            """Accept the fake provider status."""
+            return None
+
+        def json(self) -> object:
+            """Raise the same shape of error as invalid JSON decoding."""
+            raise ValueError("invalid json")
+
+    class BadJsonClient:
+        """Represent an HTTP client returning invalid JSON."""
+
+        def __init__(self, timeout: int) -> None:
+            """Store the fake timeout value."""
+            self.timeout = timeout
+
+        def __enter__(self) -> "BadJsonClient":
+            """Enter the fake HTTP client context."""
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            """Exit the fake HTTP client context."""
+            return None
+
+        def post(self, _url: str, json: dict[str, object]) -> BadJsonResponse:
+            """Return a fake response for every provider request."""
+            return BadJsonResponse()
+
+    monkeypatch.setattr(valhalla.httpx, "Client", BadJsonClient)
+    request = RouteSuggestionRequest(**_route_request_payload())
+
+    with pytest.raises(AppException) as exc_info:
+        valhalla.request_valhalla_loop_routes("http://valhalla.test", request)
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.code == "ROUTING_PROVIDER_UNAVAILABLE"
+
+
+def _route_candidate(distance_m: float, geometry: list[tuple[float, float]]) -> "RouteCandidate":
+    """Return a route candidate for service tests."""
+    from app.schemas.route_planning import RouteCandidate
+
+    return RouteCandidate(
+        id="valhalla-test",
+        name="Loop candidate",
+        distance_m=distance_m,
+        duration_s=3600,
+        elevation_gain_m=None,
+        geometry=geometry,
+        provider="valhalla",
+        score=1,
+        warnings=[],
+    )
 
 
 def _route_request_payload() -> dict[str, object]:

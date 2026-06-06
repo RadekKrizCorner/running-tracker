@@ -10,6 +10,7 @@ from app.schemas.route_planning import RouteCandidate, RouteSuggestionRequest
 
 VALHALLA_PROVIDER = "valhalla"
 EARTH_RADIUS_M = 6_371_000
+PROVIDER_UNAVAILABLE_DETAIL = "Routing provider is unavailable"
 
 
 def build_valhalla_loop_payload(request: RouteSuggestionRequest, bearing_degrees: float = 0) -> dict[str, Any]:
@@ -50,7 +51,8 @@ def request_valhalla_loop_routes(base_url: str, request: RouteSuggestionRequest)
                 payload = build_valhalla_loop_payload(request, bearing)
                 response = client.post(url, json=payload)
                 response.raise_for_status()
-                for candidate in normalize_valhalla_response(response.json()):
+                response_payload = _response_payload(response)
+                for candidate in normalize_valhalla_response(response_payload):
                     index = len(candidates) + 1
                     candidates.append(
                         candidate.model_copy(
@@ -63,8 +65,23 @@ def request_valhalla_loop_routes(base_url: str, request: RouteSuggestionRequest)
                     if len(candidates) >= request.candidate_count:
                         return candidates
     except httpx.HTTPError as exc:
-        raise AppException(503, "ROUTING_PROVIDER_UNAVAILABLE", "Routing provider is unavailable") from exc
+        raise _provider_unavailable() from exc
+    except Exception as exc:
+        raise _provider_unavailable() from exc
     return candidates
+
+
+def _response_payload(response: httpx.Response) -> dict[str, Any]:
+    """Return a decoded Valhalla response payload."""
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Valhalla response payload must be an object")
+    return payload
+
+
+def _provider_unavailable() -> AppException:
+    """Return a routing provider unavailable exception."""
+    return AppException(503, "ROUTING_PROVIDER_UNAVAILABLE", PROVIDER_UNAVAILABLE_DETAIL)
 
 
 def _hill_cost(preference: str) -> float:
