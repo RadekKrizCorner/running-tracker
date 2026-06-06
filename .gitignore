@@ -30,3 +30,4 @@ playwright-report/
 .playwright-cli/
 infra/k8s/overlays/local/secret.env
 .local-backups/
+.superpowers/
