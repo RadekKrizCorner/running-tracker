@@ -22,7 +22,7 @@ Personal running tracker for importing Strava runs, monitoring training progress
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2, Alembic |
 | Data | PostgreSQL 16, Redis, RQ |
 | Frontend | React, TypeScript, Vite, TanStack Query, Recharts, MapLibre |
-| Integrations | Strava OAuth/API, optional elevation provider |
+| Integrations | Strava OAuth/API, optional elevation provider, optional self-hosted Valhalla routing |
 | Testing | pytest, Vitest, Testing Library |
 | Deployment | Docker Compose, production Compose, local Kubernetes manifests |
 
@@ -64,6 +64,19 @@ Events store race date, location, surface, priority, target time, website, GPX/c
 ### Trends, Heatmap, And Reports
 
 Trends cover load, durability, HR-zone time, easy pace, long-run share, plan adherence, monotony, hilliness, and coach-effect signals. The heatmap aggregates owner-only GPS streams into route density cells. Weekly reports can be generated as SVG or PNG.
+
+### Route Explorer
+
+Route Explorer submits owner-authenticated loop-route requests to the backend and previews generated candidates on MapLibre. Route generation is optional and disabled by default. To enable it, run a local Valhalla instance with Czech Republic routing data, then set:
+
+```dotenv
+ROUTING_ENABLED=true
+ROUTING_PROVIDER=valhalla
+VALHALLA_BASE_URL=http://localhost:8002
+ROUTE_SUGGESTION_MAX_DISTANCE_M=50000
+```
+
+The frontend never calls Valhalla directly. If Valhalla is not configured or unavailable, the app remains usable and the route endpoint returns an `unavailable` response.
 
 ### Portfolio Demo Account
 

@@ -19,3 +19,5 @@ Demo sessions are read-only. The backend blocks demo writes, data export, accoun
 Export includes profile, provider connection metadata without tokens, activities, notes, gear, planned workouts, weekly metrics CSV, and activity CSV.
 
 Account deletion removes local app data only. It does not delete activities from Strava.
+
+Route Explorer sends the owner-entered start point and route preferences to the Running Tracker backend. When optional routing is enabled, the backend forwards that request to the configured local Valhalla service. Generated route suggestions are returned to the browser for preview and are not stored by V1.
