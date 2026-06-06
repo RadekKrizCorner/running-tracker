@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -39,6 +39,71 @@ describe('ReportsPage report builder', () => {
       );
     });
   });
+
+  test('loads updates and deletes a saved Instagram report', async () => {
+    const fetchMock = reportBuilderFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    renderReportsPage();
+
+    expect(await screen.findByRole('heading', { name: 'Uložené reporty' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Načíst Uložený týden' }));
+
+    expect(screen.getByLabelText('Nadpis reportu')).toHaveValue('Uložený týden');
+    expect(screen.getByDisplayValue('12,3')).toBeInTheDocument();
+    expect(screen.getByLabelText('Týden reportu')).toHaveValue('2026-05-11');
+
+    fireEvent.change(screen.getByLabelText('Nadpis reportu'), { target: { value: 'Aktualizovaný týden' } });
+    await userEvent.click(screen.getByRole('button', { name: 'Aktualizovat report' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/reports/report-1'),
+        expect.objectContaining({
+          method: 'PATCH',
+          body: expect.stringContaining('Aktualizovaný týden'),
+        }),
+      );
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Smazat Aktualizovaný týden' }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/reports/report-1'),
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+    expect(screen.queryByRole('button', { name: 'Načíst Aktualizovaný týden' })).not.toBeInTheDocument();
+  });
+
+  test('edits main metric, volume and footer fields before preview', async () => {
+    const fetchMock = reportBuilderFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    renderReportsPage();
+
+    expect(await screen.findByRole('option', { name: 'Maratonská příprava' })).toBeInTheDocument();
+    expect(await screen.findByLabelText('Jednotka hlavní metriky')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Jednotka hlavní metriky'), { target: { value: 'mi' } });
+    fireEvent.change(screen.getByLabelText('Popisek hlavní metriky'), { target: { value: 'trailový objem' } });
+    fireEvent.change(screen.getByLabelText('Splnění plánu (%)'), { target: { value: '75' } });
+    fireEvent.change(screen.getByLabelText('Plánovaný objem'), { target: { value: '40' } });
+    fireEvent.change(screen.getByLabelText('Skutečný objem'), { target: { value: '30' } });
+    fireEvent.change(screen.getByLabelText('Patička'), { target: { value: 'trail\nsíla' } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Náhled SVG' }));
+
+    await waitFor(() => {
+      const renderCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/reports/render.svg'));
+      expect(renderCall).toBeDefined();
+      const body = JSON.parse(String(renderCall?.[1]?.body));
+      expect(body.values.main_unit).toBe('mi');
+      expect(body.values.main_label).toBe('trailový objem');
+      expect(body.values.completion_percent).toBe(75);
+      expect(body.values.volume).toMatchObject({ planned: 40, actual: 30 });
+      expect(body.values.footer).toEqual(['trail', 'síla']);
+      expect(body.template.theme).toBeDefined();
+    });
+  });
 });
 
 function renderReportsPage() {
@@ -58,6 +123,24 @@ function renderReportsPage() {
 }
 
 function reportBuilderFetch() {
+  const generatedReports = [
+    {
+      id: 'report-1',
+      template_id: 'template-1',
+      title: 'Uložený týden',
+      period_start: '2026-05-11',
+      period_end: '2026-05-17',
+      values: {
+        ...reportValues(),
+        title: 'Uložený týden',
+        week: 'Týden 0',
+        main_distance: '12,3',
+      },
+      created_at: '2026-06-06T11:00:00Z',
+      updated_at: '2026-06-06T11:00:00Z',
+    },
+  ];
+
   return vi.fn((url: string, init?: RequestInit) => {
     if (url.includes('/analytics/yearly-summary')) {
       return Promise.resolve(
@@ -77,8 +160,8 @@ function reportBuilderFetch() {
             name: 'Maratonská příprava',
             description: 'Výchozí šablona',
             format: 'instagram_story',
-            theme: {},
-            sections: [],
+            theme: { primary: '#B7FF2A' },
+            sections: [{ id: 'volume', label: 'Objem týdne' }],
             field_defaults: {
               title: 'Týdenní běžecký report',
               main_unit: 'km',
@@ -89,6 +172,20 @@ function reportBuilderFetch() {
           },
         ]),
       );
+    }
+    if (url.includes('/reports/report-1') && init?.method === 'PATCH') {
+      const body = JSON.parse(String(init.body));
+      generatedReports[0] = {
+        ...generatedReports[0],
+        ...body,
+        title: body.title,
+        updated_at: '2026-06-06T12:00:00Z',
+      };
+      return Promise.resolve(jsonResponse(generatedReports[0]));
+    }
+    if (url.includes('/reports/report-1') && init?.method === 'DELETE') {
+      generatedReports.splice(0, generatedReports.length);
+      return Promise.resolve(new Response(null, { status: 204 }));
     }
     if (url.includes('/reports/prefill')) {
       expect(init?.method).toBe('POST');
@@ -101,6 +198,9 @@ function reportBuilderFetch() {
         }),
       );
     }
+    if (url.endsWith('/reports')) {
+      return Promise.resolve(jsonResponse(generatedReports));
+    }
     if (url.includes('/reports/render.svg')) {
       expect(init?.method).toBe('POST');
       return Promise.resolve(
@@ -109,6 +209,17 @@ function reportBuilderFetch() {
           headers: { 'Content-Type': 'image/svg+xml' },
         }),
       );
+    }
+    if (url.includes('/reports') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      const created = {
+        id: 'report-created',
+        ...body,
+        created_at: '2026-06-06T12:30:00Z',
+        updated_at: '2026-06-06T12:30:00Z',
+      };
+      generatedReports.unshift(created);
+      return Promise.resolve(jsonResponse(created));
     }
     return Promise.resolve(jsonResponse({}));
   });

@@ -1,12 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { API_BASE_URL, apiRequest } from '../../lib/api/client';
+import { apiFetch, apiRequest } from '../../lib/api/client';
 import type {
   GeneratedReport,
+  GeneratedReportPayload,
   ReportPrefillResponse,
   ReportRenderPayload,
   ReportTemplate,
   ReportTemplatePayload,
-  ReportValues,
 } from '../../lib/api/types';
 
 export function useReportTemplates() {
@@ -58,13 +58,35 @@ export function useReportPrefill() {
 export function useCreateGeneratedReport() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (payload: {
-      template_id?: string | null;
-      title: string;
-      period_start: string;
-      period_end: string;
-      values: ReportValues;
-    }) => apiRequest<GeneratedReport>('/reports', { method: 'POST', body: payload }),
+    mutationFn: (payload: GeneratedReportPayload) => apiRequest<GeneratedReport>('/reports', { method: 'POST', body: payload }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['generatedReports'] });
+    },
+  });
+}
+
+export function useGeneratedReports() {
+  return useQuery({
+    queryKey: ['generatedReports'],
+    queryFn: () => apiRequest<GeneratedReport[]>('/reports'),
+  });
+}
+
+export function useUpdateGeneratedReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: { id: string; updates: Partial<GeneratedReportPayload> }) =>
+      apiRequest<GeneratedReport>(`/reports/${payload.id}`, { method: 'PATCH', body: payload.updates }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['generatedReports'] });
+    },
+  });
+}
+
+export function useDeleteGeneratedReport() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (reportId: string) => apiRequest<void>(`/reports/${reportId}`, { method: 'DELETE' }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['generatedReports'] });
     },
@@ -93,14 +115,8 @@ export async function downloadRenderedReport(payload: ReportRenderPayload, forma
 }
 
 async function renderReport(payload: ReportRenderPayload, format: 'svg' | 'png') {
-  const response = await fetch(`${API_BASE_URL}/reports/render.${format}`, {
+  return apiFetch(`/reports/render.${format}`, {
     method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: payload,
   });
-  if (!response.ok) {
-    throw new Error('Report render failed');
-  }
-  return response;
 }

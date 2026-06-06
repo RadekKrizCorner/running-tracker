@@ -123,11 +123,72 @@ def test_report_prefill_and_render_endpoints_return_social_outputs(client: TestC
     assert "25,4" in svg_response.text
 
     png_response = client.post("/api/v1/reports/render.png", json=render_payload)
+    if png_response.status_code == 503:
+        assert png_response.json()["code"] == "REPORT_PNG_RENDER_UNAVAILABLE"
+        return
     assert png_response.status_code == 200
     assert png_response.headers["content-type"].startswith("image/png")
     assert png_response.content.startswith(b"\x89PNG\r\n\x1a\n")
     assert int.from_bytes(png_response.content[16:20], "big") == 1080
     assert int.from_bytes(png_response.content[20:24], "big") == 1920
+
+
+def test_report_render_handles_non_finite_numeric_strings(client: TestClient) -> None:
+    """Verify report rendering normalizes non-finite numeric strings."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={
+            "values": {
+                "title": "Non finite report",
+                "completion_percent": "nan",
+                "volume": {"planned": "inf", "actual": "-inf", "difference": "nan"},
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/svg+xml")
+    assert "Non finite report" in response.text
+    assert "nan" not in response.text.lower()
+    assert "inf" not in response.text.lower()
+
+
+def test_report_render_uses_template_theme_and_section_labels(client: TestClient) -> None:
+    """Verify report rendering applies template visual metadata."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={
+            "values": {"title": "Template themed report", "volume": {"planned": 10, "actual": 12}},
+            "template": {
+                "theme": {
+                    "background": "#101820",
+                    "background_end": "#182848",
+                    "surface": "#223344",
+                    "primary": "#00FF99",
+                    "secondary": "#FF3366",
+                    "text": "#F7F7F7",
+                    "muted": "#D0D7E2",
+                    "stroke": "#445566",
+                },
+                "sections": [
+                    {"id": "volume", "label": "Weekly volume"},
+                    {"id": "went_well", "label": "Highlights"},
+                    {"id": "focus_next", "label": "Next targets"},
+                ],
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert 'stop-color="#101820"' in response.text
+    assert 'fill="#00FF99"' in response.text
+    assert "Weekly volume" in response.text
+    assert "Highlights" in response.text
+    assert "Next targets" in response.text
 
 
 def test_saved_report_api_is_owner_scoped(client: TestClient) -> None:

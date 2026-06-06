@@ -4,6 +4,19 @@ Weekly distance is total running distance completed in the selected week.
 
 Yearly Report statistics are direct totals for completed running activities in the selected owner-local calendar year. The year runs from local `YYYY-01-01 00:00` inclusive to local `YYYY+1-01-01 00:00` exclusive. Running kilometers sum activity distance, total elevation sums elevation gain, and running time sums moving time.
 
+Instagram report-builder prefill derives editable values from owner-scoped plans, planned workouts, and completed running activities for the selected owner-local week. The selected date is normalized to the app week start, and the report period is that start date through six days later.
+
+- Program uses the active training plan covering the week, uppercased. If no plan covers the week, it falls back to `BĚŽECKÁ PŘÍPRAVA`.
+- Week label is the one-based week offset from the covering plan start. Without a covering plan, it uses the calendar ISO week number.
+- Main distance is completed running distance in the week, formatted in kilometers with one decimal.
+- Completion percent is completed distance divided by planned distance, rounded to the nearest whole percent. If planned distance is zero, completion is `0`.
+- Planned distance sums non-null planned workout target distances in the week after planned-session deduplication.
+- Completed distance, run count, moving time, longest run, and average pace use completed running activities in the same owner-local week.
+- Plan vs actual displays planned weekly kilometers and completed weekly kilometers as `planned / actual km`.
+- Training adherence displays completed running activities divided by planned non-rest sessions.
+- Volume planned/actual values are planned and completed kilometers rounded to one decimal. Volume difference is actual minus planned, rounded to one decimal.
+- Narrative summary, what-went-well, next-focus, and footer values are deterministic text suggestions from completed session count, completion percent, longest run, and volume difference. They are transparent starting copy and remain manually editable before rendering or saving.
+
 Weekly load is a transparent training-stress estimate. During Strava sync, each activity is calculated from the HR zone set that is effective on the activity date. If a heart-rate stream and effective HR zones are available, load uses minutes in zone multiplied by default zone weights. If not, it uses RPE when present. Otherwise it uses duration multiplied by `2.0`.
 
 HR zone sets are dated profile records. Add a new zone set when your zones change. Saving a zone set recomputes existing activities that already have HR streams or average HR, and future syncs calculate imported activities with the effective zone set for each activity date. Settings also exposes a manual recalculation action for existing imports; it requires at least one saved zone set and reports how many HR activities remain unknown.

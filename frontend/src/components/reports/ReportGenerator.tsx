@@ -1,14 +1,23 @@
-import { CalendarDays, Download, Eye, FileText, Save, Wand2 } from 'lucide-react';
+import { CalendarDays, Download, Eye, FileText, Save, Trash2, Wand2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import {
   downloadRenderedReport,
   renderReportSvg,
   useCreateGeneratedReport,
   useCreateReportTemplate,
+  useDeleteGeneratedReport,
+  useGeneratedReports,
   useReportPrefill,
   useReportTemplates,
+  useUpdateGeneratedReport,
 } from '../../features/reports/api';
-import type { ReportTemplate, ReportValues } from '../../lib/api/types';
+import type {
+  GeneratedReport,
+  GeneratedReportPayload,
+  ReportTemplate,
+  ReportTemplateRenderConfig,
+  ReportValues,
+} from '../../lib/api/types';
 import { addDaysToIso } from '../../lib/date';
 import { useTranslation } from '../../lib/i18n';
 import { ReportTemplateEditor } from './ReportTemplateEditor';
@@ -21,11 +30,16 @@ type ReportGeneratorProps = {
 export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGeneratorProps) {
   const { t } = useTranslation();
   const templatesQuery = useReportTemplates();
+  const savedReportsQuery = useGeneratedReports();
   const prefill = useReportPrefill();
   const saveReport = useCreateGeneratedReport();
+  const updateReport = useUpdateGeneratedReport();
+  const deleteReport = useDeleteGeneratedReport();
   const createTemplate = useCreateReportTemplate();
   const templates = Array.isArray(templatesQuery.data) ? templatesQuery.data : [];
+  const savedReports = Array.isArray(savedReportsQuery.data) ? savedReportsQuery.data : [];
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [activeReportId, setActiveReportId] = useState('');
   const [values, setValues] = useState<ReportValues>(defaultReportValues());
   const [templateName, setTemplateName] = useState('');
   const [previewSvg, setPreviewSvg] = useState('');
@@ -46,6 +60,7 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
 
   const selectTemplate = (templateId: string) => {
     setSelectedTemplateId(templateId);
+    setActiveReportId('');
     const template = templates.find((item) => item.id === templateId);
     if (template) {
       setTemplateName(`${template.name} kopie`);
@@ -59,14 +74,14 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
       week_start_date: weekStart,
       template_id: selectedTemplateId || null,
     });
-    setValues(mergeReportValues(values, response.values));
+    setValues((current) => mergeReportValues(current, response.values));
     setPreviewSvg('');
   };
 
   const previewReport = async () => {
     setRendering(true);
     try {
-      setPreviewSvg(await renderReportSvg({ values }));
+      setPreviewSvg(await renderReportSvg({ values, template: renderTemplateConfig(selectedTemplate) }));
     } finally {
       setRendering(false);
     }
@@ -75,20 +90,46 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
   const exportReport = async (format: 'svg' | 'png') => {
     setRendering(true);
     try {
-      await downloadRenderedReport({ values }, format);
+      await downloadRenderedReport({ values, template: renderTemplateConfig(selectedTemplate) }, format);
     } finally {
       setRendering(false);
     }
   };
 
+  const reportPayload = (): GeneratedReportPayload => ({
+    template_id: selectedTemplateId || null,
+    title: values.title || t('reports.builderDefaultReportTitle'),
+    period_start: weekStart,
+    period_end: addDaysToIso(weekStart, 6),
+    values,
+  });
+
   const saveCurrentReport = async () => {
-    await saveReport.mutateAsync({
-      template_id: selectedTemplateId || null,
-      title: values.title || t('reports.builderDefaultReportTitle'),
-      period_start: weekStart,
-      period_end: addDaysToIso(weekStart, 6),
-      values,
-    });
+    const created = await saveReport.mutateAsync(reportPayload());
+    setActiveReportId(created.id);
+  };
+
+  const updateCurrentReport = async () => {
+    if (!activeReportId) {
+      return;
+    }
+    await updateReport.mutateAsync({ id: activeReportId, updates: reportPayload() });
+  };
+
+  const loadSavedReport = (report: GeneratedReport) => {
+    setActiveReportId(report.id);
+    setSelectedTemplateId(report.template_id ?? '');
+    setTemplateName(report.title);
+    setValues(mergeReportValues(defaultReportValues(), report.values));
+    onWeekStartChange(report.period_start);
+    setPreviewSvg('');
+  };
+
+  const deleteSavedReport = async (report: GeneratedReport) => {
+    await deleteReport.mutateAsync(report.id);
+    if (activeReportId === report.id) {
+      setActiveReportId('');
+    }
   };
 
   const saveTemplateCopy = async () => {
@@ -156,6 +197,15 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
         </button>
       </div>
 
+      <SavedReportsPanel
+        activeReportId={activeReportId}
+        reports={savedReports}
+        isLoading={savedReportsQuery.isLoading}
+        deletingReportId={deleteReport.variables ?? ''}
+        onDelete={deleteSavedReport}
+        onLoad={loadSavedReport}
+      />
+
       <ReportTemplateEditor values={values} onChange={setValues} disabled={prefill.isPending || rendering} />
 
       <div className="report-builder-save-row">
@@ -169,7 +219,16 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
         </button>
         <button className="secondary-button" type="button" disabled={saveReport.isPending} onClick={saveCurrentReport}>
           <Save size={17} />
-          {t('reports.builderSaveReport')}
+          {t('reports.builderSaveNewReport')}
+        </button>
+        <button
+          className="secondary-button"
+          type="button"
+          disabled={!activeReportId || updateReport.isPending}
+          onClick={updateCurrentReport}
+        >
+          <Save size={17} />
+          {t('reports.builderUpdateReport')}
         </button>
       </div>
 
@@ -191,6 +250,66 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
         <iframe className="report-builder-preview" title={t('reports.builderPreviewTitle')} srcDoc={previewSvg} />
       </div>
     </section>
+  );
+}
+
+type SavedReportsPanelProps = {
+  activeReportId: string;
+  reports: GeneratedReport[];
+  isLoading: boolean;
+  deletingReportId: string;
+  onLoad: (report: GeneratedReport) => void;
+  onDelete: (report: GeneratedReport) => void;
+};
+
+function SavedReportsPanel({
+  activeReportId,
+  reports,
+  isLoading,
+  deletingReportId,
+  onLoad,
+  onDelete,
+}: SavedReportsPanelProps) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="report-builder-fieldset">
+      <div className="report-builder-subheader">
+        <FileText size={18} />
+        <h3>{t('reports.builderSavedReports')}</h3>
+      </div>
+      {isLoading ? <p className="muted-text">{t('reports.builderSavedReportsLoading')}</p> : null}
+      {!isLoading && reports.length === 0 ? <p className="muted-text">{t('reports.builderNoSavedReports')}</p> : null}
+      {reports.length > 0 ? (
+        <div className="report-builder-saved-list">
+          {reports.map((report) => (
+            <div className={activeReportId === report.id ? 'report-builder-saved-row active' : 'report-builder-saved-row'} key={report.id}>
+              <button
+                aria-label={t('reports.builderLoadNamedReport', { title: report.title })}
+                className="secondary-button"
+                type="button"
+                onClick={() => onLoad(report)}
+              >
+                <FileText size={16} />
+                {report.title}
+              </button>
+              <span>
+                {report.period_start} - {report.period_end}
+              </span>
+              <button
+                aria-label={t('reports.builderDeleteNamedReport', { title: report.title })}
+                className="icon-button danger"
+                disabled={deletingReportId === report.id}
+                type="button"
+                onClick={() => onDelete(report)}
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -240,5 +359,15 @@ function defaultTemplate(): ReportTemplate {
     is_default: false,
     created_at: '',
     updated_at: '',
+  };
+}
+
+function renderTemplateConfig(template: ReportTemplate | undefined): ReportTemplateRenderConfig | undefined {
+  if (!template) {
+    return undefined;
+  }
+  return {
+    theme: template.theme,
+    sections: template.sections,
   };
 }

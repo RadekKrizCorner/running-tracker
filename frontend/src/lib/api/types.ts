@@ -232,6 +232,11 @@ export type ReportTemplate = {
 
 export type ReportTemplatePayload = Omit<ReportTemplate, 'id' | 'created_at' | 'updated_at'>;
 
+export type ReportTemplateRenderConfig = {
+  theme: Record<string, unknown>;
+  sections: Array<Record<string, unknown>>;
+};
+
 export type ReportPrefillResponse = {
   template_id: string | null;
   period_start: string;
@@ -241,6 +246,7 @@ export type ReportPrefillResponse = {
 
 export type ReportRenderPayload = {
   values: ReportValues;
+  template?: ReportTemplateRenderConfig;
 };
 
 export type GeneratedReport = {
@@ -253,6 +259,8 @@ export type GeneratedReport = {
   created_at: string;
   updated_at: string;
 };
+
+export type GeneratedReportPayload = Omit<GeneratedReport, 'id' | 'created_at' | 'updated_at'>;
 
 export type AerobicTrendPoint = {
   date: string;

@@ -872,8 +872,39 @@ button:disabled {
 
 .report-builder-textareas {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+}
+
+.report-builder-saved-list {
+  display: grid;
+  gap: 8px;
+}
+
+.report-builder-saved-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.report-builder-saved-row.active {
+  border-color: var(--green);
+}
+
+.report-builder-saved-row > span,
+.muted-text {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.icon-button.danger:hover {
+  border-color: rgba(168, 45, 45, 0.42);
+  color: #a82d2d;
 }
 
 .report-builder-save-row,
@@ -4444,6 +4475,7 @@ td a:hover {
   .report-builder-toolbar,
   .report-builder-textareas,
   .report-builder-preview-row,
+  .report-builder-saved-row,
   .report-meta-list,
   .annual-report-panel,
   .annual-stats-list {

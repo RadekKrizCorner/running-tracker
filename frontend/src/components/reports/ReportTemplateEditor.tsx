@@ -1,22 +1,27 @@
 import { BarChart3, FileText, ListChecks } from 'lucide-react';
+import type { Dispatch, SetStateAction } from 'react';
 import type { ReportValues } from '../../lib/api/types';
 import { useTranslation } from '../../lib/i18n';
 
 type ReportTemplateEditorProps = {
   values: ReportValues;
-  onChange: (values: ReportValues) => void;
+  onChange: Dispatch<SetStateAction<ReportValues>>;
   disabled?: boolean;
 };
 
 export function ReportTemplateEditor({ values, onChange, disabled = false }: ReportTemplateEditorProps) {
   const { t } = useTranslation();
   const stats = values.stats ?? {};
+  const volume = values.volume ?? {};
 
   const updateValue = (key: keyof ReportValues, value: string | number | string[]) => {
-    onChange({ ...values, [key]: value });
+    onChange((current) => ({ ...current, [key]: value }));
   };
   const updateStats = (key: keyof NonNullable<ReportValues['stats']>, value: string) => {
-    onChange({ ...values, stats: { ...stats, [key]: value } });
+    onChange((current) => ({ ...current, stats: { ...(current.stats ?? {}), [key]: value } }));
+  };
+  const updateVolume = (key: keyof NonNullable<ReportValues['volume']>, value: number) => {
+    onChange((current) => ({ ...current, volume: { ...(current.volume ?? {}), [key]: value } }));
   };
 
   return (
@@ -35,7 +40,7 @@ export function ReportTemplateEditor({ values, onChange, disabled = false }: Rep
           />
           <TextField
             disabled={disabled}
-            label={t('reports.builderTitle')}
+            label={t('reports.builderReportTitle')}
             value={textValue(values.title)}
             onChange={(value) => updateValue('title', value)}
           />
@@ -50,6 +55,18 @@ export function ReportTemplateEditor({ values, onChange, disabled = false }: Rep
             label={t('reports.builderMainDistance')}
             value={textValue(values.main_distance)}
             onChange={(value) => updateValue('main_distance', value)}
+          />
+          <TextField
+            disabled={disabled}
+            label={t('reports.builderMainUnit')}
+            value={textValue(values.main_unit)}
+            onChange={(value) => updateValue('main_unit', value)}
+          />
+          <TextField
+            disabled={disabled}
+            label={t('reports.builderMainLabel')}
+            value={textValue(values.main_label)}
+            onChange={(value) => updateValue('main_label', value)}
           />
         </div>
       </div>
@@ -96,6 +113,28 @@ export function ReportTemplateEditor({ values, onChange, disabled = false }: Rep
             value={textValue(stats.training_adherence)}
             onChange={(value) => updateStats('training_adherence', value)}
           />
+          <NumberField
+            disabled={disabled}
+            label={t('reports.builderCompletion')}
+            min={0}
+            max={100}
+            value={numberValue(values.completion_percent)}
+            onChange={(value) => updateValue('completion_percent', value)}
+          />
+          <NumberField
+            disabled={disabled}
+            label={t('reports.builderPlannedVolume')}
+            min={0}
+            value={numberValue(volume.planned)}
+            onChange={(value) => updateVolume('planned', value)}
+          />
+          <NumberField
+            disabled={disabled}
+            label={t('reports.builderActualVolume')}
+            min={0}
+            value={numberValue(volume.actual)}
+            onChange={(value) => updateVolume('actual', value)}
+          />
         </div>
       </div>
 
@@ -123,6 +162,12 @@ export function ReportTemplateEditor({ values, onChange, disabled = false }: Rep
             value={values.focus_next}
             onChange={(value) => updateValue('focus_next', value)}
           />
+          <LinesField
+            disabled={disabled}
+            label={t('reports.builderFooter')}
+            value={values.footer}
+            onChange={(value) => updateValue('footer', value)}
+          />
         </div>
       </div>
     </div>
@@ -141,6 +186,31 @@ function TextField({ label, value, disabled, onChange }: TextFieldProps) {
     <label className="report-field">
       <span>{label}</span>
       <input disabled={disabled} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+type NumberFieldProps = {
+  label: string;
+  value: number;
+  disabled: boolean;
+  min?: number;
+  max?: number;
+  onChange: (value: number) => void;
+};
+
+function NumberField({ label, value, disabled, min, max, onChange }: NumberFieldProps) {
+  return (
+    <label className="report-field">
+      <span>{label}</span>
+      <input
+        disabled={disabled}
+        max={max}
+        min={min}
+        type="number"
+        value={value}
+        onChange={(event) => onChange(clampedNumber(event.target.value, min, max))}
+      />
     </label>
   );
 }
@@ -175,4 +245,20 @@ function splitLines(value: string) {
 
 function textValue(value: unknown) {
   return typeof value === 'string' ? value : '';
+}
+
+function numberValue(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function clampedNumber(value: string, min?: number, max?: number) {
+  const parsed = Number(value);
+  let next = Number.isFinite(parsed) ? parsed : 0;
+  if (typeof min === 'number') {
+    next = Math.max(min, next);
+  }
+  if (typeof max === 'number') {
+    next = Math.min(max, next);
+  }
+  return next;
 }

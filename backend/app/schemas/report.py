@@ -102,3 +102,4 @@ class ReportRenderRequest(BaseModel):
     """Represent report render input."""
 
     values: ReportJson = Field(default_factory=dict)
+    template: ReportJson | None = None

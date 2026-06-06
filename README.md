@@ -76,6 +76,7 @@ The demo account is public and read-only. Its data is generated separately from 
 - Docker and Docker Compose
 - Node 22+ for local frontend work outside Docker
 - Python 3.12+ for local backend work outside Docker
+- Native Cairo/Pango libraries for local PNG report rendering outside Docker. Docker installs these automatically. On macOS with Homebrew, install `cairo`, `pango`, and `gdk-pixbuf`; on Debian/Ubuntu, install `libcairo2`, `libpango-1.0-0`, `libpangocairo-1.0-0`, and `libgdk-pixbuf-2.0-0`.
 
 ### Run With Docker Compose
 

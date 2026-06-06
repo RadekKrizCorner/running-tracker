@@ -110,7 +110,7 @@ def post_report_render_svg(payload: ReportRenderRequest, user: CurrentUser) -> R
     """Return report values rendered as SVG."""
     _ = user
     return Response(
-        content=render_report_svg(payload.values),
+        content=render_report_svg(payload.values, payload.template),
         media_type="image/svg+xml",
         headers={"Content-Disposition": 'attachment; filename="instagram-report.svg"'},
     )
@@ -121,7 +121,7 @@ def post_report_render_png(payload: ReportRenderRequest, user: CurrentUser) -> R
     """Return report values rendered as PNG."""
     _ = user
     return Response(
-        content=render_report_png(payload.values),
+        content=render_report_png(payload.values, payload.template),
         media_type="image/png",
         headers={"Content-Disposition": 'attachment; filename="instagram-report.png"'},
     )
