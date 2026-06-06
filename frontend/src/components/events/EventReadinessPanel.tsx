@@ -138,9 +138,10 @@ function ReadinessItemRow({ item }: { item: EventReadinessItem }) {
 }
 
 function GuidanceMessageRow({ message }: { message: EventGuidanceMessage }) {
+  const { t } = useTranslation();
   return (
     <div className="activity-row readiness-row">
-      <span className={`badge ${message.tone}`}>{message.tone}</span>
+      <span className={`badge ${message.tone}`}>{t(`readiness.tone.${message.tone}`)}</span>
       <div>
         <strong>{message.title}</strong>
         <span>{message.detail}</span>

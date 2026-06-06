@@ -38,6 +38,12 @@ describe('EventReadinessPanel', () => {
     expect(screen.getByText(/Unknown/i)).toBeInTheDocument();
     expect(screen.getByText(/Plan to event/i)).toBeInTheDocument();
     expect(screen.getByText(/Long run is close/i)).toBeInTheDocument();
+    expect(screen.getByText('On track')).toBeInTheDocument();
+    expect(screen.getByText('Needs attention')).toBeInTheDocument();
+    expect(screen.getByText('Note')).toBeInTheDocument();
+    expect(screen.queryByText('success')).not.toBeInTheDocument();
+    expect(screen.queryByText('warning')).not.toBeInTheDocument();
+    expect(screen.queryByText('neutral')).not.toBeInTheDocument();
   });
 });
 
@@ -83,6 +89,16 @@ function readinessFixture() {
         tone: 'success',
         title: 'Long run is close',
         detail: 'Your recent long run is already near the event distance.',
+      },
+      {
+        tone: 'warning',
+        title: 'Sharpen taper plan',
+        detail: 'Reduce load before race week if fatigue rises.',
+      },
+      {
+        tone: 'neutral',
+        title: 'Course notes',
+        detail: 'Keep course logistics visible in the event details.',
       },
     ],
   };

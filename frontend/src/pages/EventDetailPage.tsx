@@ -152,7 +152,7 @@ function PlanningGuidancePanel({ guidance }: { guidance: EventPlanningGuidance |
             ))}
             {guidance.messages.map((message) => (
               <div className="activity-row" key={`${message.title}-${message.tone}`}>
-                <span className={`badge ${message.tone}`}>{message.tone}</span>
+                <span className={`badge ${message.tone}`}>{t(`readiness.tone.${message.tone}`)}</span>
                 <div>
                   <strong>{message.title}</strong>
                   <span>{message.detail}</span>

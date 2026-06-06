@@ -105,6 +105,8 @@ describe('EventDetailPage', () => {
     expect(screen.getByRole('heading', { name: /Event readiness dashboard/i })).toBeInTheDocument();
     expect(screen.getByText(/Easy aerobic run/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Long run is close/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('On track').length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText('success')).not.toBeInTheDocument();
     expect(screen.getByText(/Run steady/i)).toBeInTheDocument();
     expect(screen.getByText(/Race shoes/i)).toBeInTheDocument();
   });
