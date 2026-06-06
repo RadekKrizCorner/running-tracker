@@ -5,11 +5,12 @@ from uuid import UUID
 from fastapi import APIRouter, Response
 
 from app.api.deps import CurrentUser, DbSession, WritableUser
-from app.schemas.event import EventCreate, EventPlanningGuidance, EventRead, EventUpdate
+from app.schemas.event import EventCreate, EventPlanningGuidance, EventRead, EventReadiness, EventUpdate
 from app.services.event_service import (
     create_event,
     delete_event,
     event_planning_guidance,
+    event_readiness,
     event_to_read,
     get_event_for_user,
     list_events,
@@ -44,6 +45,13 @@ def get_event_planning_guidance(event_id: UUID, session: DbSession, user: Curren
     """Return transparent planning guidance for one owner event."""
     event = get_event_for_user(session, user.id, event_id)
     return event_planning_guidance(session, user, event)
+
+
+@router.get("/{event_id}/readiness", response_model=EventReadiness)
+def get_event_readiness(event_id: UUID, session: DbSession, user: CurrentUser) -> EventReadiness:
+    """Return readiness metrics for one owner event."""
+    event = get_event_for_user(session, user.id, event_id)
+    return event_readiness(session, user, event)
 
 
 @router.patch("/{event_id}", response_model=EventRead)
