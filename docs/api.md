@@ -8,6 +8,7 @@ Core groups:
 - `/connections/strava/*` OAuth, status, sync, sync job status, and disconnect.
 - `/activities/*` activity list/detail with HR zone breakdown, streams, notes, gear assignment, and splits.
 - `/analytics/*` dashboard, weekly metrics, yearly running summary, recent dense weekly metrics, detailed trend metrics, load, intensity, aerobic trend, PRs, and GPS route heatmap.
+- `/report-templates/*`, `/reports/*` Instagram report templates, saved report drafts, weekly prefill, and SVG/PNG rendering.
 - `/events/*` goal races/events with countdown, target pace, preparation metrics, editable race notes, course URL, and GPX course data.
 - `/profile/hr-zones` dated owner heart-rate zones used for sync-time load and intensity calculation.
 - `/profile/hr-zones/recompute` explicit recalculation for imported HR activities after zones are configured.
@@ -50,3 +51,21 @@ Demo write attempts return:
 - `intensity_class`, `sport_type`, `workout_type`, `min_distance_m`, `max_distance_m`, `has_hr`, and `gear_id`: structured filters.
 - `sort`: prefix with `-` for descending order. Supported keys are `start_time`, `distance`, `moving_time`, `pace`, `average_hr`, `computed_load`, and `elevation_gain`.
 - `page` and `page_size`: pagination, defaulting to page `1` and `50` rows.
+
+## Report Builder
+
+Report builder endpoints are owner-scoped and authenticated.
+
+- `GET /api/v1/report-templates`: list owner templates. Normal owner reads create the default Instagram story template when missing; demo reads do not write defaults.
+- `POST /api/v1/report-templates`: create an owner template.
+- `GET /api/v1/report-templates/{template_id}`: read one owner template.
+- `PATCH /api/v1/report-templates/{template_id}`: update one owner template.
+- `DELETE /api/v1/report-templates/{template_id}`: delete one owner template and detach saved report drafts from it.
+- `GET /api/v1/reports`: list owner saved report drafts.
+- `POST /api/v1/reports`: create an owner saved report draft.
+- `GET /api/v1/reports/{report_id}`: read one owner saved report draft.
+- `PATCH /api/v1/reports/{report_id}`: update one owner saved report draft.
+- `DELETE /api/v1/reports/{report_id}`: delete one owner saved report draft.
+- `POST /api/v1/reports/prefill`: build editable Instagram report values from one owner week of plans and completed runs.
+- `POST /api/v1/reports/render.svg`: render submitted report values to SVG.
+- `POST /api/v1/reports/render.png`: render submitted report values to PNG.

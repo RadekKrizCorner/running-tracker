@@ -68,11 +68,11 @@ The optional portfolio demo account is represented by `users.is_demo=true`. `POS
 - `app/models`: SQLAlchemy data model.
 - `app/schemas`: Pydantic request and response contracts.
 - `app/api/routes`: FastAPI route groups.
-- `app/services`: business logic for auth, activities, analytics, trends, events, export, gear, notifications, planning, profile, and elevation correction.
+- `app/services`: business logic for auth, activities, analytics, trends, events, export, gear, notifications, planning, profile, reports, and elevation correction.
 - `app/analytics`: pure metric helpers for load, intensity, HR zone breakdown, and elevation gain.
 - `app/providers`: Strava API/OAuth mapping/sync and optional elevation provider client.
 - `app/jobs`: RQ queue, worker tasks, and periodic scheduler.
-- `app/tests`: pytest coverage for auth, analytics, activities, events, planning, Strava, notifications, migrations, preferences, elevation, calendar, app origins, seed cleanup, and HR zones.
+- `app/tests`: pytest coverage for auth, analytics, activities, events, planning, reports, Strava, notifications, migrations, preferences, elevation, calendar, app origins, seed cleanup, and HR zones.
 
 ## Data Model
 
@@ -111,6 +111,11 @@ The optional portfolio demo account is represented by `users.is_demo=true`. `POS
 - `weekly_metrics`: recomputed owner weekly aggregates for distance, time, elevation, run count, load, acute/chronic load, ramp ratio, intensity seconds, and long-run distance.
 - `heart_rate_zone_sets`: dated HR zone definitions. The newest set whose `effective_from` is on or before an activity date applies.
 - `notifications`: owner-facing in-app notifications with action links and deduplication source fields.
+
+### Report Builder
+
+- `report_templates`: owner-scoped structured Instagram report templates with JSON theme, sections, field defaults, default flag, and timestamps.
+- `generated_reports`: owner-scoped saved report drafts with optional template link, report period, editable JSON values, and timestamps. Rendered PNG/SVG binaries are not stored.
 
 ## API Inventory
 
@@ -158,6 +163,22 @@ All routes below are under `/api/v1` unless noted. All routes require authentica
 - `GET /analytics/aerobic-trend`: easy-run efficiency points.
 - `GET /analytics/prs`: activity-level personal record summaries.
 - `GET /analytics/heatmap`: aggregated route density cells and bounds.
+
+### Report Builder
+
+- `GET /report-templates`: list owner templates.
+- `POST /report-templates`: create template.
+- `GET /report-templates/{template_id}`: read one owner template.
+- `PATCH /report-templates/{template_id}`: update one owner template.
+- `DELETE /report-templates/{template_id}`: delete one owner template.
+- `GET /reports`: list saved report drafts.
+- `POST /reports`: create saved report draft.
+- `GET /reports/{report_id}`: read one owner saved report draft.
+- `PATCH /reports/{report_id}`: update one owner saved report draft.
+- `DELETE /reports/{report_id}`: delete one owner saved report draft.
+- `POST /reports/prefill`: prefill editable report values from owner-scoped weekly plan and activity data.
+- `POST /reports/render.svg`: render submitted report values as SVG.
+- `POST /reports/render.png`: render submitted report values as PNG.
 
 ### Events
 
@@ -340,6 +361,7 @@ Feature API modules define TanStack Query hooks:
 - `features/analytics/api.ts`: weekly analytics, recent weeks, trend metrics, aerobic trend, PRs, heatmap.
 - `features/events/api.ts`: events, event detail, create/update, planning guidance.
 - `features/plans/api.ts`: calendar, templates, week schedule, week copy, workout pool, events, plans, generate plan.
+- `features/reports/api.ts`: report templates, weekly prefill, saved report drafts, and SVG/PNG render requests.
 - `features/profile/api.ts`: HR zones, preferences, HR recompute, elevation recompute.
 - `features/notifications/api.ts`: summary, list, read, read all, delete with optimistic update.
 
@@ -354,6 +376,7 @@ Feature API modules define TanStack Query hooks:
 - `EventDetailPage`: event metrics, editable details, GPX/course map, poster image, guidance, notes.
 - `TrendsPage`: trend charts, recent balance, durability, personal records, coach-effect signals.
 - `HeatmapPage`: route density map and range filters.
+- `ReportsPage`: annual stats, legacy weekly report download, Instagram report template selection, structured editing, prefill, preview, export, and save actions.
 - `SettingsPage`: display preferences, language, Strava controls, HR zones, recalculation, elevation, export/delete, avatar.
 - `LoginPage` and `SetupPage`: auth forms, including a demo login action when the backend enables it.
 
@@ -390,6 +413,7 @@ Migration history:
 - `202605210001_avatar_preferences.py`: avatar icon and uploaded avatar image.
 - `202605220001_planned_workout_sessions.py`: planned workout session labels and sort order.
 - `202606040001_demo_account.py`: demo account flag on users.
+- `202606060001_report_builder.py`: report templates and saved report drafts.
 
 The app also calls `Base.metadata.create_all()` on startup for local personal-deployment convenience, but migrations remain the explicit schema history.
 

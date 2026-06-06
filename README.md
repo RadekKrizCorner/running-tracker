@@ -12,7 +12,7 @@ Personal running tracker for importing Strava runs, monitoring training progress
 - Manual weekly planning with reusable workout templates, copy-week workflow, and plan-vs-actual comparison.
 - Calendar and event tracking for races, goal events, custom notes, and preparation metrics.
 - Route heatmap built from owner-scoped GPS stream aggregation.
-- Weekly report SVG/PNG generation for sharing training summaries.
+- Weekly report SVG/PNG generation plus an Instagram report builder with saved templates, weekly prefill, preview, and export.
 - Public read-only demo account with fictional rolling data and synthetic city routes.
 
 ## Tech Stack
@@ -63,7 +63,7 @@ Events store race date, location, surface, priority, target time, website, GPX/c
 
 ### Trends, Heatmap, And Reports
 
-Trends cover load, durability, HR-zone time, easy pace, long-run share, plan adherence, monotony, hilliness, and coach-effect signals. The heatmap aggregates owner-only GPS streams into route density cells. Weekly reports can be generated as SVG or PNG.
+Trends cover load, durability, HR-zone time, easy pace, long-run share, plan adherence, monotony, hilliness, and coach-effect signals. The heatmap aggregates owner-only GPS streams into route density cells. Reports include the original weekly SVG/PNG export and a structured Instagram builder that can prefill owner weekly data, edit copy, preview SVG, export SVG/PNG, and save reusable templates or report drafts.
 
 ### Portfolio Demo Account
 
@@ -213,6 +213,23 @@ Request the rasterized PNG version:
 curl -b "session=<session-cookie>" \
   "http://localhost:8009/api/v1/analytics/weekly-report.png?week_start_date=2026-05-18" \
   -o weekly-report-2026-05-18.png
+```
+
+Prefill and render an Instagram report builder draft:
+
+```bash
+curl -b "session=<session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{"week_start_date":"2026-05-18"}' \
+  "http://localhost:8009/api/v1/reports/prefill"
+```
+
+```bash
+curl -b "session=<session-cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{"values":{"title":"Týdenní běžecký report","week":"Týden 1","main_distance":"25,4","main_unit":"km"}}' \
+  "http://localhost:8009/api/v1/reports/render.svg" \
+  -o instagram-report.svg
 ```
 
 ## Documentation
