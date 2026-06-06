@@ -410,6 +410,40 @@ export type EventPlanningGuidance = {
   messages: EventGuidanceMessage[];
 };
 
+export type EventReadinessIntensityMix = {
+  easy_time_s: number;
+  moderate_time_s: number;
+  hard_time_s: number;
+  unknown_time_s: number;
+};
+
+export type EventReadinessItem = {
+  key: string;
+  label: string;
+  value: string;
+  detail: string;
+  status: 'good' | 'watch' | 'missing' | 'neutral';
+};
+
+export type EventReadiness = {
+  event_id: string;
+  phase: string;
+  days_until_start: number;
+  target_pace_s_per_km: number | null;
+  recent_4w_distance_m: number;
+  recent_4w_load: number;
+  recent_4w_run_count: number;
+  longest_run_8w_m: number;
+  long_run_event_distance_ratio: number | null;
+  planned_distance_to_event_m: number;
+  planned_load_to_event: number;
+  planned_sessions_to_event: number;
+  missed_planned_sessions: number;
+  intensity_mix: EventReadinessIntensityMix;
+  readiness_items: EventReadinessItem[];
+  guidance_messages: EventGuidanceMessage[];
+};
+
 export type PlannedWorkout = {
   id: string | null;
   plan_id: string | null;

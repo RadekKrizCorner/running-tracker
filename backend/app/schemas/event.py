@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -135,6 +136,46 @@ class EventGuidanceMessage(BaseModel):
     tone: str
     title: str
     detail: str
+
+
+class EventReadinessIntensityMix(BaseModel):
+    """Represent recent event readiness intensity seconds."""
+
+    easy_time_s: int
+    moderate_time_s: int
+    hard_time_s: int
+    unknown_time_s: int
+
+
+class EventReadinessItem(BaseModel):
+    """Represent one transparent readiness metric item."""
+
+    key: str
+    label: str
+    value: str
+    detail: str
+    status: Literal["good", "watch", "missing", "neutral"]
+
+
+class EventReadiness(BaseModel):
+    """Represent event readiness metrics and guidance."""
+
+    event_id: UUID
+    phase: str
+    days_until_start: int
+    target_pace_s_per_km: float | None = None
+    recent_4w_distance_m: float
+    recent_4w_load: float
+    recent_4w_run_count: int
+    longest_run_8w_m: float
+    long_run_event_distance_ratio: float | None = None
+    planned_distance_to_event_m: float
+    planned_load_to_event: float
+    planned_sessions_to_event: int
+    missed_planned_sessions: int
+    intensity_mix: EventReadinessIntensityMix
+    readiness_items: list[EventReadinessItem]
+    guidance_messages: list[EventGuidanceMessage]
 
 
 class EventSuggestedSession(BaseModel):

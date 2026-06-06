@@ -15,6 +15,9 @@ from app.schemas.event import (
     EventGuidanceMessage,
     EventPlanningGuidance,
     EventPreparation,
+    EventReadiness,
+    EventReadinessIntensityMix,
+    EventReadinessItem,
     EventRead,
     EventSuggestedSession,
     EventUpdate,
@@ -65,7 +68,7 @@ def event_to_read(session: Session, user: User, event: Event) -> EventRead:
     today = local_date(utc_now(), user.timezone)
     days_until = (event.event_date - today).days
     distance_m = float(event.distance_m or 0)
-    target_pace = (event.target_time_s / (distance_m / 1000)) if event.target_time_s and distance_m > 0 else None
+    target_pace = _target_pace_s_per_km(event)
     return EventRead(
         id=event.id,
         name=event.name,
@@ -111,6 +114,35 @@ def event_planning_guidance(session: Session, user: User, event: Event) -> Event
         suggested_long_run_m=round(suggested_long_run, 2) if suggested_long_run is not None else None,
         suggested_sessions=_suggested_sessions(event, suggested_weekly_distance, locale),
         messages=_guidance_messages(event, preparation, locale),
+    )
+
+
+def event_readiness(session: Session, user: User, event: Event) -> EventReadiness:
+    """Return transparent readiness metrics for one event."""
+    today = local_date(utc_now(), user.timezone)
+    preparation = calculate_event_preparation(session, user, event, today)
+    four_week_start = today - timedelta(days=27)
+    recent_activities = _activities_between(session, user, four_week_start, today)
+    intensity_mix = _readiness_intensity_mix(recent_activities)
+    target_pace = _target_pace_s_per_km(event)
+    locale = _user_locale(session, user.id)
+    return EventReadiness(
+        event_id=event.id,
+        phase=preparation.phase,
+        days_until_start=(event.event_date - today).days,
+        target_pace_s_per_km=round(target_pace, 2) if target_pace is not None else None,
+        recent_4w_distance_m=preparation.current_4w_distance_m,
+        recent_4w_load=preparation.current_4w_load,
+        recent_4w_run_count=len(recent_activities),
+        longest_run_8w_m=preparation.longest_run_8w_m,
+        long_run_event_distance_ratio=preparation.long_run_event_distance_ratio,
+        planned_distance_to_event_m=preparation.planned_distance_to_event_m,
+        planned_load_to_event=preparation.planned_load_to_event,
+        planned_sessions_to_event=preparation.planned_sessions_to_event,
+        missed_planned_sessions=preparation.missed_planned_sessions,
+        intensity_mix=intensity_mix,
+        readiness_items=_readiness_items(event, preparation, target_pace, len(recent_activities), intensity_mix, locale),
+        guidance_messages=_guidance_messages(event, preparation, locale),
     )
 
 
@@ -197,6 +229,145 @@ def _planned_workout_load(workout: PlannedWorkout) -> float:
         return 0
     factor = {"easy": 2, "moderate": 4, "hard": 6, "race": 8, "rest": 0}.get(workout.target_intensity or "easy", 2)
     return ((workout.target_duration_s or 0) / 60) * factor
+
+
+def _target_pace_s_per_km(event: Event) -> float | None:
+    """Return target pace seconds per kilometer for an event."""
+    distance_m = float(event.distance_m or 0)
+    if not event.target_time_s or distance_m <= 0:
+        return None
+    return event.target_time_s / (distance_m / 1000)
+
+
+def _readiness_intensity_mix(activities: list[Activity]) -> EventReadinessIntensityMix:
+    """Return recent activity intensity seconds for readiness."""
+    easy = 0
+    moderate = 0
+    hard = 0
+    unknown = 0
+    for activity in activities:
+        seconds = activity.moving_time_s or 0
+        if activity.intensity_class == "easy":
+            easy += seconds
+        elif activity.intensity_class == "moderate":
+            moderate += seconds
+        elif activity.intensity_class == "hard":
+            hard += seconds
+        else:
+            unknown += seconds
+    return EventReadinessIntensityMix(
+        easy_time_s=easy,
+        moderate_time_s=moderate,
+        hard_time_s=hard,
+        unknown_time_s=unknown,
+    )
+
+
+def _readiness_items(
+    event: Event,
+    preparation: EventPreparation,
+    target_pace_s_per_km: float | None,
+    recent_run_count: int,
+    intensity_mix: EventReadinessIntensityMix,
+    locale: str,
+) -> list[EventReadinessItem]:
+    """Return transparent readiness metric items."""
+    return [
+        EventReadinessItem(
+            key="target_pace",
+            label=_localized_text(locale, "target_pace_item_label"),
+            value=_format_pace_value(target_pace_s_per_km),
+            detail=_localized_text(locale, "target_pace_item_detail"),
+            status="good" if target_pace_s_per_km is not None else "missing",
+        ),
+        EventReadinessItem(
+            key="recent_volume",
+            label=_localized_text(locale, "recent_volume_item_label"),
+            value=f"{_format_distance_value(preparation.current_4w_distance_m)} / {recent_run_count}",
+            detail=_localized_text(locale, "recent_volume_item_detail"),
+            status="good" if recent_run_count > 0 else "missing",
+        ),
+        EventReadinessItem(
+            key="long_run",
+            label=_localized_text(locale, "long_run_item_label"),
+            value=_format_ratio_value(preparation.long_run_event_distance_ratio),
+            detail=_localized_text(locale, "long_run_item_detail"),
+            status=_long_run_status(preparation.long_run_event_distance_ratio),
+        ),
+        EventReadinessItem(
+            key="future_plan",
+            label=_localized_text(locale, "future_plan_item_label"),
+            value=f"{_format_distance_value(preparation.planned_distance_to_event_m)} / {preparation.planned_sessions_to_event}",
+            detail=_localized_text(locale, "future_plan_item_detail"),
+            status=_future_plan_status(event, preparation),
+        ),
+        EventReadinessItem(
+            key="missed_sessions",
+            label=_localized_text(locale, "missed_sessions_item_label"),
+            value=str(preparation.missed_planned_sessions),
+            detail=_localized_text(locale, "missed_sessions_item_detail"),
+            status="good" if preparation.missed_planned_sessions == 0 else "watch",
+        ),
+        EventReadinessItem(
+            key="intensity_mix",
+            label=_localized_text(locale, "intensity_mix_item_label"),
+            value=_format_minutes_value(
+                intensity_mix.easy_time_s
+                + intensity_mix.moderate_time_s
+                + intensity_mix.hard_time_s
+                + intensity_mix.unknown_time_s
+            ),
+            detail=_localized_text(locale, "intensity_mix_item_detail"),
+            status="good"
+            if intensity_mix.easy_time_s + intensity_mix.moderate_time_s + intensity_mix.hard_time_s > 0
+            else "missing",
+        ),
+    ]
+
+
+def _long_run_status(ratio: float | None) -> str:
+    """Return readiness status for long-run distance ratio."""
+    if ratio is None or ratio <= 0:
+        return "missing"
+    if ratio >= 0.8:
+        return "good"
+    return "watch"
+
+
+def _future_plan_status(event: Event, preparation: EventPreparation) -> str:
+    """Return readiness status for future planned work."""
+    if preparation.phase in {"completed", "cancelled"} or event.status in {"completed", "cancelled"}:
+        return "neutral"
+    if preparation.planned_sessions_to_event > 0:
+        return "good"
+    return "missing"
+
+
+def _format_pace_value(seconds_per_km: float | None) -> str:
+    """Return a readable pace value."""
+    if seconds_per_km is None:
+        return "n/a"
+    rounded = round(seconds_per_km)
+    minutes = rounded // 60
+    seconds = rounded % 60
+    return f"{minutes}:{seconds:02d}/km"
+
+
+def _format_distance_value(distance_m: float) -> str:
+    """Return a readable kilometer value."""
+    return f"{distance_m / 1000:.1f} km"
+
+
+def _format_ratio_value(ratio: float | None) -> str:
+    """Return a readable percent ratio value."""
+    if ratio is None:
+        return "n/a"
+    return f"{round(ratio * 100)}%"
+
+
+def _format_minutes_value(seconds: int) -> str:
+    """Return a readable minute value."""
+    return f"{round(seconds / 60)} min"
 
 
 def _preparation_phase(event: Event, today: date) -> str:
@@ -347,6 +518,18 @@ EVENT_GUIDANCE_COPY = {
         "plan_adherence_detail": "Nedávno bylo vynecháno {count} plánovaných tréninků.",
         "priority_event_title": "Prioritní událost",
         "priority_event_detail": "Poslední týden drž konzervativně, aby událost zůstala hlavním těžkým úsilím.",
+        "target_pace_item_label": "Cílové tempo",
+        "target_pace_item_detail": "Cílový čas vydělený vzdáleností události.",
+        "recent_volume_item_label": "Poslední 4 týdny",
+        "recent_volume_item_detail": "Dokončená běžecká vzdálenost a počet běhů za posledních 28 dní.",
+        "long_run_item_label": "Dlouhý běh",
+        "long_run_item_detail": "Nejdelší běh za posledních 8 týdnů proti vzdálenosti události.",
+        "future_plan_item_label": "Plán do události",
+        "future_plan_item_detail": "Plánované běžecké tréninky od dneška do dne události.",
+        "missed_sessions_item_label": "Vynechané tréninky",
+        "missed_sessions_item_detail": "Plánované běžecké tréninky z posledních 28 dní bez dokončené aktivity.",
+        "intensity_mix_item_label": "Rozložení intenzity",
+        "intensity_mix_item_detail": "Čas běhu za posledních 28 dní podle uložené intenzity aktivit.",
     },
     "en-US": {
         "easy_session_title": "Easy aerobic run",
@@ -365,5 +548,17 @@ EVENT_GUIDANCE_COPY = {
         "plan_adherence_detail": "{count} planned sessions were missed recently.",
         "priority_event_title": "Priority event",
         "priority_event_detail": "Keep the final week conservative so the event remains the main hard effort.",
+        "target_pace_item_label": "Target pace",
+        "target_pace_item_detail": "Target time divided by event distance.",
+        "recent_volume_item_label": "Recent 4 weeks",
+        "recent_volume_item_detail": "Completed running distance and run count over the last 28 days.",
+        "long_run_item_label": "Long run",
+        "long_run_item_detail": "Longest run in the last 8 weeks compared with event distance.",
+        "future_plan_item_label": "Plan to event",
+        "future_plan_item_detail": "Planned running sessions from today through event day.",
+        "missed_sessions_item_label": "Missed sessions",
+        "missed_sessions_item_detail": "Planned running sessions from the last 28 days without a completed activity.",
+        "intensity_mix_item_label": "Intensity mix",
+        "intensity_mix_item_detail": "Running time from the last 28 days by stored activity intensity.",
     },
 }

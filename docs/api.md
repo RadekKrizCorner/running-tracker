@@ -8,7 +8,7 @@ Core groups:
 - `/connections/strava/*` OAuth, status, sync, sync job status, and disconnect.
 - `/activities/*` activity list/detail with HR zone breakdown, streams, notes, gear assignment, and splits.
 - `/analytics/*` dashboard, weekly metrics, yearly running summary, recent dense weekly metrics, detailed trend metrics, load, intensity, aerobic trend, PRs, and GPS route heatmap.
-- `/events/*` goal races/events with countdown, target pace, preparation metrics, editable race notes, course URL, and GPX course data.
+- `/events/*` goal races/events with countdown, target pace, preparation/readiness metrics, editable race notes, course URL, and GPX course data.
 - `/profile/hr-zones` dated owner heart-rate zones used for sync-time load and intensity calculation.
 - `/profile/hr-zones/recompute` explicit recalculation for imported HR activities after zones are configured.
 - `/calendar`, `/calendar/week`, `/calendar/events/*`, `/planned-workouts/*`, `/plans/*`, `/workout-templates/*` planning, manual weekly schedules, completed activities, custom events, races, and reusable templates.
@@ -32,6 +32,12 @@ Demo write attempts return:
   "code": "DEMO_READ_ONLY"
 }
 ```
+
+## Event Readiness
+
+`GET /api/v1/events/{event_id}/readiness` returns owner-scoped readiness context for one event. It requires authentication and returns 404 when the event does not belong to the current owner.
+
+The response includes countdown/phase, target pace, recent 4-week distance/load/run count, longest 8-week run, long-run distance ratio, planned distance/load/sessions through event day, missed planned sessions, recent intensity mix seconds, readiness items, and guidance messages. Readiness item statuses are `good`, `watch`, `missing`, or `neutral`; they are transparent planning context, not medical or injury predictions.
 
 `GET /api/v1/auth/options` is public and returns whether the portfolio demo login should be shown:
 
