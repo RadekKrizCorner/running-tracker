@@ -165,6 +165,7 @@ All routes below are under `/api/v1` unless noted. All routes require authentica
 - `POST /events`: create an event.
 - `GET /events/{event_id}`: read one event.
 - `GET /events/{event_id}/planning-guidance`: transparent event planning guidance.
+- `GET /events/{event_id}/readiness`: transparent event readiness cockpit metrics and guidance.
 - `PATCH /events/{event_id}`: update event details.
 - `DELETE /events/{event_id}`: delete event.
 
@@ -247,7 +248,7 @@ Weekly metrics are fully recomputed for the owner when requested by analytics or
 
 Detailed trend metrics are calculated on demand from activities, streams, HR zones, and planned workouts. They include HR zone time, easy pace, long-run share, run-day count, hilliness, pace by HR zone, plan adherence, monotony, and coach-effect codes.
 
-Event preparation is calculated from owner-local dates, recent activity windows, future planned workouts, target distance/time, missed sessions, and event status.
+Event preparation is calculated from owner-local dates, recent activity windows, future planned workouts, target distance/time, missed sessions, and event status. Event readiness is a live response built on the same owner-scoped data, adding recent run count, intensity mix, readiness items, and non-medical guidance messages for the event detail cockpit.
 
 ## Strava Sync
 
@@ -338,7 +339,7 @@ Feature API modules define TanStack Query hooks:
 - `features/dashboard/api.ts`: dashboard payload.
 - `features/activities/api.ts`: list/detail/streams/splits/notes.
 - `features/analytics/api.ts`: weekly analytics, recent weeks, trend metrics, aerobic trend, PRs, heatmap.
-- `features/events/api.ts`: events, event detail, create/update, planning guidance.
+- `features/events/api.ts`: events, event detail, create/update, planning guidance, readiness.
 - `features/plans/api.ts`: calendar, templates, week schedule, week copy, workout pool, events, plans, generate plan.
 - `features/profile/api.ts`: HR zones, preferences, HR recompute, elevation recompute.
 - `features/notifications/api.ts`: summary, list, read, read all, delete with optimistic update.
@@ -351,7 +352,7 @@ Feature API modules define TanStack Query hooks:
 - `CalendarPage`: week/month calendar, custom event modal, day drawer.
 - `PlansPage`: manual weekly scheduler, multi-session day support, templates, workout pool, copy week, live planned metrics.
 - `EventsPage`: event list, event creation wizard, event preparation cards.
-- `EventDetailPage`: event metrics, editable details, GPX/course map, poster image, guidance, notes.
+- `EventDetailPage`: event metrics, readiness cockpit, editable details, GPX/course map, poster image, guidance, notes.
 - `TrendsPage`: trend charts, recent balance, durability, personal records, coach-effect signals.
 - `HeatmapPage`: route density map and range filters.
 - `SettingsPage`: display preferences, language, Strava controls, HR zones, recalculation, elevation, export/delete, avatar.

@@ -63,3 +63,12 @@ Event preparation metrics are simple planning indicators:
 - Planned distance/load to event: planned workouts from today through event date.
 - Missed planned sessions: recent planned non-rest workouts before today without a linked completion.
 - Phase: base, build, peak, taper, race week, completed, or cancelled based on days remaining and event status.
+
+Event readiness uses the same live owner-scoped event preparation data and adds a cockpit response for event detail. It is not a medical or injury prediction. It reports:
+
+- Recent 4-week run count, distance, load, and intensity mix from completed running activities in the last 28 owner-local days.
+- Longest 8-week run and its ratio to the event distance.
+- Planned distance, planned load, and planned non-rest session count from today through event day.
+- Missed planned sessions from the last 28 days before today.
+- Readiness items with `good`, `watch`, `missing`, or `neutral` status. These statuses describe data availability and training context only.
+- Guidance messages using transparent, non-medical wording.
