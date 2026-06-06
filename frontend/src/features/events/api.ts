@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../../lib/api/client';
-import type { Event, EventPlanningGuidance } from '../../lib/api/types';
+import type { Event, EventPlanningGuidance, EventReadiness } from '../../lib/api/types';
 
 export type EventPayload = {
   name: string;
@@ -59,6 +59,7 @@ export function useUpdateEvent(eventId: string | undefined) {
       queryClient.setQueryData(['event', eventId], event);
       queryClient.invalidateQueries({ queryKey: ['events'] });
       queryClient.invalidateQueries({ queryKey: ['eventPlanningGuidance', eventId] });
+      queryClient.invalidateQueries({ queryKey: ['eventReadiness', eventId] });
       queryClient.invalidateQueries({ queryKey: ['calendar'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
@@ -69,6 +70,14 @@ export function useEventPlanningGuidance(eventId: string | undefined) {
   return useQuery({
     queryKey: ['eventPlanningGuidance', eventId],
     queryFn: () => apiRequest<EventPlanningGuidance>(`/events/${eventId}/planning-guidance`),
+    enabled: Boolean(eventId),
+  });
+}
+
+export function useEventReadiness(eventId: string | undefined) {
+  return useQuery({
+    queryKey: ['eventReadiness', eventId],
+    queryFn: () => apiRequest<EventReadiness>(`/events/${eventId}/readiness`),
     enabled: Boolean(eventId),
   });
 }

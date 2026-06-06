@@ -11,6 +11,9 @@ describe('EventDetailPage', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
+        if (url.includes('/events/event-1/readiness')) {
+          return Promise.resolve(jsonResponse(readinessResponse()));
+        }
         if (url.includes('/events/event-1/planning-guidance')) {
           return Promise.resolve(
             jsonResponse({
@@ -99,20 +102,11 @@ describe('EventDetailPage', () => {
     expect(screen.getAllByText(/4\.7 weeks/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Long run covers 140%/i)).toBeInTheDocument();
     expect(await screen.findByText(/Planning guidance/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Event readiness dashboard/i })).toBeInTheDocument();
     expect(screen.getByText(/Easy aerobic run/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Long run is close/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Run steady/i)).toBeInTheDocument();
     expect(screen.getByText(/Race shoes/i)).toBeInTheDocument();
-    expect(screen.queryByText(/^Phase$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Build$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^4w distance$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Recent 4w$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Longest 8w$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Planned distance$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/^Missed sessions$/i)).not.toBeInTheDocument();
-    expect(screen.queryByText('22.0 km')).not.toBeInTheDocument();
-    expect(screen.queryByText('14.0 km')).not.toBeInTheDocument();
-    expect(screen.queryByText('15.0 km')).not.toBeInTheDocument();
   });
 
   test('uploads a custom poster image without calling poster generation', async () => {
@@ -121,6 +115,9 @@ describe('EventDetailPage', () => {
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
         calls.push([url, init]);
+        if (url.includes('/events/event-1/readiness')) {
+          return Promise.resolve(jsonResponse(readinessResponse()));
+        }
         if (url.includes('/events/event-1/planning-guidance')) {
           return Promise.resolve(jsonResponse(emptyGuidance()));
         }
@@ -164,6 +161,9 @@ describe('EventDetailPage', () => {
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
         calls.push([url, init]);
+        if (url.includes('/events/event-1/readiness')) {
+          return Promise.resolve(jsonResponse(readinessResponse()));
+        }
         if (url.includes('/events/event-1/planning-guidance')) {
           return Promise.resolve(jsonResponse(emptyGuidance()));
         }
@@ -209,6 +209,9 @@ describe('EventDetailPage', () => {
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
         calls.push([url, init]);
+        if (url.includes('/events/event-1/readiness')) {
+          return Promise.resolve(jsonResponse(readinessResponse()));
+        }
         if (url.includes('/events/event-1/planning-guidance')) {
           return Promise.resolve(jsonResponse(emptyGuidance()));
         }
@@ -265,6 +268,9 @@ describe('EventDetailPage', () => {
       'fetch',
       vi.fn((url: string, init?: RequestInit) => {
         calls.push([url, init]);
+        if (url.includes('/events/event-1/readiness')) {
+          return Promise.resolve(jsonResponse(readinessResponse()));
+        }
         if (url.includes('/events/event-1/planning-guidance')) {
           return Promise.resolve(jsonResponse(emptyGuidance()));
         }
@@ -359,6 +365,40 @@ function emptyGuidance() {
     suggested_long_run_m: null,
     suggested_sessions: [],
     messages: [],
+  };
+}
+
+function readinessResponse() {
+  return {
+    event_id: 'event-1',
+    phase: 'build',
+    days_until_start: 33,
+    target_pace_s_per_km: 300,
+    recent_4w_distance_m: 22000,
+    recent_4w_load: 280,
+    recent_4w_run_count: 2,
+    longest_run_8w_m: 14000,
+    long_run_event_distance_ratio: 1.4,
+    planned_distance_to_event_m: 15000,
+    planned_load_to_event: 200,
+    planned_sessions_to_event: 1,
+    missed_planned_sessions: 1,
+    intensity_mix: {
+      easy_time_s: 3000,
+      moderate_time_s: 5400,
+      hard_time_s: 0,
+      unknown_time_s: 0,
+    },
+    readiness_items: [
+      {
+        key: 'long_run',
+        label: 'Long run',
+        value: '140%',
+        detail: 'Longest run in the last 8 weeks compared with event distance.',
+        status: 'good',
+      },
+    ],
+    guidance_messages: [{ tone: 'success', title: 'Long run is close', detail: 'Your recent long run is close.' }],
   };
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { EventReadinessPanel } from '../components/events/EventReadinessPanel';
 import { ActivityMap } from '../components/maps/ActivityMap';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useEvent, useEventPlanningGuidance, useUpdateEvent } from '../features/events/api';
@@ -63,7 +64,6 @@ function EventDetail({
           </Link>
         </div>
       </header>
-      {editing ? <EventDetailsEditor event={event} updateEvent={updateEvent} /> : null}
       <section className="metric-grid">
         <Metric label={t('events.countdown')} value={event.days_until_start >= 0 ? `${event.days_until_start} ${t('events.days')}` : t('common.completed')} />
         <Metric label={t('common.date')} value={formatDate(event.event_date)} />
@@ -71,6 +71,8 @@ function EventDetail({
         <Metric label={t('events.targetTime')} value={event.target_time_s ? formatDuration(event.target_time_s) : t('common.notAvailable')} />
         <Metric label={t('events.targetPace')} value={formatPace(event.distance_m, event.target_time_s)} />
       </section>
+      <EventReadinessPanel eventId={event.id} />
+      {editing ? <EventDetailsEditor event={event} updateEvent={updateEvent} /> : null}
       <EventPrepSnapshot event={event} />
       <section className="split-grid">
         <PlanningGuidancePanel guidance={guidance} />
