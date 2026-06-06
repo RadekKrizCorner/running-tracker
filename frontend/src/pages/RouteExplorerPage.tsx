@@ -192,7 +192,11 @@ export function RouteExplorerPage() {
               <p className="eyebrow">{t('routes.resultsEyebrow')}</p>
               <h2>{t('routes.resultsTitle')}</h2>
             </div>
-            {response ? <span className={`status-pill ${response.status === 'ok' ? 'success' : 'warning'}`}>{response.status}</span> : null}
+            {response ? (
+              <span className={`status-pill ${response.status === 'ok' ? 'success' : 'warning'}`}>
+                {t(`routes.status.${response.status}`)}
+              </span>
+            ) : null}
           </div>
 
           {!response ? (

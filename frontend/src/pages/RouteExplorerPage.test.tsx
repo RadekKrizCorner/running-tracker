@@ -125,6 +125,8 @@ describe('RouteExplorerPage', () => {
 
     await user.click(screen.getByRole('button', { name: /Generate loops/i }));
 
+    expect(await screen.findByText(/Generated/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^ok$/i)).not.toBeInTheDocument();
     expect(await screen.findByText(/Loop 12.4 km/i)).toBeInTheDocument();
     expect(screen.getAllByText(/12.4 km/i).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/1h 05m/i).length).toBeGreaterThan(0);
