@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     demo_refresh_interval_seconds: int = 60 * 60 * 24
     demo_refresh_from_owner_patterns: bool = True
     demo_refresh_history_weeks: int = 78
+    routing_enabled: bool = False
+    routing_provider: str = "valhalla"
+    valhalla_base_url: str | None = None
+    route_suggestion_max_distance_m: int = 50000
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),

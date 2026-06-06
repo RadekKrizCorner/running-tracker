@@ -47,6 +47,7 @@ Important values:
 - `STRAVA_AUTO_SYNC_ENABLED`, `STRAVA_AUTO_SYNC_INTERVAL_SECONDS`
 - `DEMO_ACCOUNT_ENABLED`, `DEMO_ACCOUNT_EMAIL`, `DEMO_ACCOUNT_PASSWORD`, `DEMO_ACCOUNT_DISPLAY_NAME`
 - `DEMO_REFRESH_ENABLED`, `DEMO_REFRESH_INTERVAL_SECONDS`, `DEMO_REFRESH_FROM_OWNER_PATTERNS`, `DEMO_REFRESH_HISTORY_WEEKS`
+- `ROUTING_ENABLED`, `ROUTING_PROVIDER`, `VALHALLA_BASE_URL`, `ROUTE_SUGGESTION_MAX_DISTANCE_M`
 - `VITE_API_BASE_URL`, `VITE_BASE_PATH`
 
 Production cookies become secure when `APP_ENV=production` and `APP_BASE_URL` starts with `https://`.
@@ -70,7 +71,7 @@ The optional portfolio demo account is represented by `users.is_demo=true`. `POS
 - `app/api/routes`: FastAPI route groups.
 - `app/services`: business logic for auth, activities, analytics, trends, events, export, gear, notifications, planning, profile, reports, and elevation correction.
 - `app/analytics`: pure metric helpers for load, intensity, HR zone breakdown, and elevation gain.
-- `app/providers`: Strava API/OAuth mapping/sync and optional elevation provider client.
+- `app/providers`: Strava API/OAuth mapping/sync, optional elevation provider client, and optional Valhalla routing client.
 - `app/jobs`: RQ queue, worker tasks, and periodic scheduler.
 - `app/tests`: pytest coverage for auth, analytics, activities, events, planning, reports, Strava, notifications, migrations, preferences, elevation, calendar, app origins, seed cleanup, and HR zones.
 
@@ -179,6 +180,10 @@ All routes below are under `/api/v1` unless noted. All routes require authentica
 - `POST /reports/prefill`: prefill editable report values from owner-scoped weekly plan and activity data.
 - `POST /reports/render.svg`: render submitted report values as SVG.
 - `POST /reports/render.png`: render submitted report values as PNG.
+
+### Routes
+
+- `POST /routes/suggest-loop`: owner-authenticated loop route suggestions from a start coordinate and route preferences. Routing is disabled by default and returns `status="unavailable"` until local Valhalla is configured.
 
 ### Events
 
@@ -345,6 +350,7 @@ Routes:
 - `/events`
 - `/events/:eventId`
 - `/heatmap`
+- `/routes`
 - `/plans`
 - `/trends`
 - `/settings/*`
@@ -360,6 +366,7 @@ Feature API modules define TanStack Query hooks:
 - `features/dashboard/api.ts`: dashboard payload.
 - `features/activities/api.ts`: list/detail/streams/splits/notes.
 - `features/analytics/api.ts`: weekly analytics, recent weeks, trend metrics, aerobic trend, PRs, heatmap.
+- `features/routes/api.ts`: self-hosted loop route suggestion mutation.
 - `features/events/api.ts`: events, event detail, create/update, planning guidance, readiness.
 - `features/plans/api.ts`: calendar, templates, week schedule, week copy, workout pool, events, plans, generate plan.
 - `features/reports/api.ts`: report templates, weekly prefill, saved report drafts, and SVG/PNG render requests.

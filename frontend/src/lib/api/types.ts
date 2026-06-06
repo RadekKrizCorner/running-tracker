@@ -319,6 +319,34 @@ export type RunHeatmap = {
   point_count: number;
 };
 
+export type RouteSuggestionRequest = {
+  start_lat: number;
+  start_lng: number;
+  target_distance_m: number;
+  distance_tolerance_m: number;
+  hill_preference: 'flat' | 'balanced' | 'hilly';
+  surface_preference: 'road' | 'mixed' | 'trail';
+  candidate_count: number;
+};
+
+export type RouteCandidate = {
+  id: string;
+  name: string;
+  distance_m: number;
+  duration_s: number | null;
+  elevation_gain_m: number | null;
+  geometry: [number, number][];
+  provider: string;
+  score: number;
+  warnings: string[];
+};
+
+export type RouteSuggestionResponse = {
+  status: 'ok' | 'unavailable';
+  detail: string;
+  candidates: RouteCandidate[];
+};
+
 export type Dashboard = {
   period: string;
   this_week: {

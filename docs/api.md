@@ -10,6 +10,7 @@ Core groups:
 - `/analytics/*` dashboard, weekly metrics, yearly running summary, recent dense weekly metrics, detailed trend metrics, load, intensity, aerobic trend, PRs, and GPS route heatmap.
 - `/events/*` goal races/events with countdown, target pace, preparation/readiness metrics, editable race notes, course URL, and GPX course data.
 - `/report-templates/*`, `/reports/*` Instagram report templates, saved report drafts, weekly prefill, and SVG/PNG rendering.
+- `/routes/suggest-loop` owner-authenticated self-hosted loop route suggestions.
 - `/profile/hr-zones` dated owner heart-rate zones used for sync-time load and intensity calculation.
 - `/profile/hr-zones/recompute` explicit recalculation for imported HR activities after zones are configured.
 - `/calendar`, `/calendar/week`, `/calendar/events/*`, `/planned-workouts/*`, `/plans/*`, `/workout-templates/*` planning, manual weekly schedules, completed activities, custom events, races, and reusable templates.
@@ -47,6 +48,36 @@ The response includes countdown/phase, target pace, recent 4-week distance/load/
   "demo_enabled": true
 }
 ```
+
+## Route Suggestions
+
+`POST /api/v1/routes/suggest-loop` requires an authenticated owner session. It does not store route suggestions. The backend calls the configured local routing provider only when `ROUTING_ENABLED=true` and `VALHALLA_BASE_URL` is set.
+
+Request:
+
+```json
+{
+  "start_lat": 50.0755,
+  "start_lng": 14.4378,
+  "target_distance_m": 12000,
+  "distance_tolerance_m": 800,
+  "hill_preference": "balanced",
+  "surface_preference": "mixed",
+  "candidate_count": 3
+}
+```
+
+Response when routing is disabled or unavailable:
+
+```json
+{
+  "status": "unavailable",
+  "detail": "Route suggestions are disabled. Configure local Valhalla to enable this feature.",
+  "candidates": []
+}
+```
+
+Successful responses return `status="ok"` and candidates with distance, duration, optional elevation gain, `[lat, lng]` geometry, provider, score, and warnings.
 
 ## Activities List
 

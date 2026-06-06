@@ -22,7 +22,7 @@ Personal running tracker for importing Strava runs, monitoring training progress
 | Backend | Python 3.12, FastAPI, SQLAlchemy 2, Alembic |
 | Data | PostgreSQL 16, Redis, RQ |
 | Frontend | React, TypeScript, Vite, TanStack Query, Recharts, MapLibre |
-| Integrations | Strava OAuth/API, optional elevation provider |
+| Integrations | Strava OAuth/API, optional elevation provider, optional self-hosted Valhalla routing |
 | Testing | pytest, Vitest, Testing Library |
 | Deployment | Docker Compose, production Compose, local Kubernetes manifests |
 
@@ -64,6 +64,34 @@ Events store race date, location, surface, priority, target time, website, GPX/c
 ### Trends, Heatmap, And Reports
 
 Trends cover load, durability, HR-zone time, easy pace, long-run share, plan adherence, monotony, hilliness, and coach-effect signals. The heatmap aggregates owner-only GPS streams into route density cells. Reports include the original weekly SVG/PNG export and a structured Instagram builder that can prefill owner weekly data, edit copy, preview SVG, export SVG/PNG, and save reusable templates or report drafts.
+
+### Route Explorer
+
+Route Explorer submits owner-authenticated loop-route requests to the backend and previews generated candidates on MapLibre. Route generation is optional and disabled by default. To enable it, run a local Valhalla instance with Czech Republic routing data, then set:
+
+```dotenv
+ROUTING_ENABLED=true
+ROUTING_PROVIDER=valhalla
+VALHALLA_BASE_URL=http://localhost:8002
+ROUTE_SUGGESTION_MAX_DISTANCE_M=50000
+```
+
+The frontend never calls Valhalla directly. If Valhalla is not configured or unavailable, the app remains usable and the route endpoint returns an `unavailable` response.
+
+Local Czech Republic Valhalla setup uses free OpenStreetMap data and local routing infrastructure. One practical setup is:
+
+1. Download `czech-republic-latest.osm.pbf` from Geofabrik's Europe/Czech Republic extract.
+2. Install or run Valhalla locally, then build tiles from that PBF into a local tile directory and extract:
+
+   ```bash
+   valhalla_build_config --mjolnir-tile-dir ./valhalla_tiles --mjolnir-tile-extract ./valhalla_tiles.tar > valhalla.json
+   valhalla_build_tiles -c valhalla.json czech-republic-latest.osm.pbf
+   valhalla_service valhalla.json 1
+   ```
+
+3. Confirm the local service responds on its route endpoint, then set `VALHALLA_BASE_URL` to that local service URL.
+
+Docker-based Valhalla images can be used instead of a native install, but image environment variables differ by maintainer. Keep the PBF, generated tiles, and service bound to local storage/networking for personal use.
 
 ### Portfolio Demo Account
 

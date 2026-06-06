@@ -14,6 +14,7 @@ from app.api.routes import (
     privacy,
     profile,
     reports,
+    route_planning,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -28,3 +29,4 @@ api_router.include_router(notifications.router)
 api_router.include_router(privacy.router)
 api_router.include_router(profile.router)
 api_router.include_router(reports.router)
+api_router.include_router(route_planning.router)
