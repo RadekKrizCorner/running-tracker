@@ -44,3 +44,5 @@ class User(Base):
     preferences = relationship("UserPreference", back_populates="user", cascade="all, delete-orphan", uselist=False)
     weekly_metrics = relationship("WeeklyMetric", back_populates="user", cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+    report_templates = relationship("ReportTemplate", back_populates="user", cascade="all, delete-orphan")
+    generated_reports = relationship("GeneratedReport", back_populates="user", cascade="all, delete-orphan")
