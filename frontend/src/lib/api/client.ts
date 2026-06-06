@@ -29,6 +29,17 @@ export function setUnauthorizedHandler(handler: () => void) {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const response = await apiFetch(path, options);
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const contentType = response.headers.get('content-type') ?? '';
+  const payload = contentType.includes('application/json') ? await response.json() : null;
+
+  return payload as T;
+}
+
+export async function apiFetch(path: string, options: RequestOptions = {}): Promise<Response> {
   const headers = new Headers(options.headers);
   const { body, ...requestOptions } = options;
   const init: RequestInit = {
@@ -45,13 +56,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, init);
-  if (response.status === 204) {
-    return undefined as T;
-  }
-  const contentType = response.headers.get('content-type') ?? '';
-  const payload = contentType.includes('application/json') ? await response.json() : null;
-
   if (!response.ok) {
+    const contentType = response.headers.get('content-type') ?? '';
+    const payload = contentType.includes('application/json') ? await response.clone().json().catch(() => null) : null;
     const code = payload?.code ?? 'REQUEST_FAILED';
     const detail = payload?.detail ?? 'Request failed';
     if (response.status === 401) {
@@ -60,7 +67,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     throw new ApiError(detail, code, response.status);
   }
 
-  return payload as T;
+  return response;
 }
 
 export function downloadUrl(path: string) {

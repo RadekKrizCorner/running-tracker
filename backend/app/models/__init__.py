@@ -10,6 +10,7 @@ from app.models.heart_rate_zone_set import HeartRateZoneSet
 from app.models.notification import Notification
 from app.models.planning import PlannedWorkout, TrainingPlan, WorkoutPoolItem, WorkoutStep, WorkoutTemplate
 from app.models.provider_connection import ProviderConnection
+from app.models.report import GeneratedReport, ReportTemplate
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.weekly_metric import WeeklyMetric
@@ -21,10 +22,12 @@ __all__ = [
     "CalendarEvent",
     "Event",
     "Gear",
+    "GeneratedReport",
     "HeartRateZoneSet",
     "Notification",
     "PlannedWorkout",
     "ProviderConnection",
+    "ReportTemplate",
     "TrainingPlan",
     "User",
     "UserPreference",
