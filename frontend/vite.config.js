@@ -6,6 +6,24 @@ export default defineConfig(({ mode }) => {
     return {
         base: env.VITE_BASE_PATH || '/',
         plugins: [react()],
+        build: {
+            chunkSizeWarningLimit: 900,
+            rollupOptions: {
+                output: {
+                    manualChunks(id) {
+                        if (id.includes('maplibre-gl')) {
+                            return 'maplibre-gl';
+                        }
+                        if (id.includes('recharts')) {
+                            return 'recharts';
+                        }
+                        if (id.includes('node_modules')) {
+                            return 'vendor';
+                        }
+                    },
+                },
+            },
+        },
         server: {
             port: 5173,
         },

@@ -1,10 +1,11 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { Map as MapLibreMap, Marker as MapLibreMarker, StyleSpecification } from 'maplibre-gl';
+import type { Map as MapLibreMap, Marker as MapLibreMarker } from 'maplibre-gl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EmptyState } from '../ui/EmptyState';
 import type { Stream } from '../../lib/api/types';
 import { decodePolyline, type LatLng } from '../../lib/polyline';
 import { useTranslation } from '../../lib/i18n';
+import { osmStyle } from './mapStyle';
 
 type ActivityMapProps = {
   streams: Stream[];
@@ -178,25 +179,4 @@ function isLatLng(value: unknown): value is LatLng {
 
 function browserSupportsMapLibre() {
   return typeof window !== 'undefined' && typeof window.URL?.createObjectURL === 'function';
-}
-
-function osmStyle(): StyleSpecification {
-  return {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '© OpenStreetMap contributors',
-      },
-    },
-    layers: [
-      {
-        id: 'osm',
-        type: 'raster',
-        source: 'osm',
-      },
-    ],
-  };
 }

@@ -5,6 +5,7 @@ namespace: running-tracker
 
 resources:
   - namespace.yaml
+  - valhalla.yaml
   - ../../base
 
 configMapGenerator:

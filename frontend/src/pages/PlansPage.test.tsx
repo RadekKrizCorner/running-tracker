@@ -249,10 +249,12 @@ describe('PlansPage', () => {
     await userEvent.click(within(mondayCard).getByRole('button', { name: /Add easy run/i }));
     expect(mondayCard).toHaveTextContent('Easy run');
 
-    await userEvent.click(within(mondayCard).getByRole('button', { name: /Mark rest/i }));
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Select Mon/i }));
+    const dialog = screen.getByRole('dialog', { name: /Edit/i });
+    await userEvent.click(within(dialog).getByRole('button', { name: /Mark whole day rest/i }));
     expect(mondayCard).toHaveTextContent('Rest day');
 
-    await userEvent.click(within(mondayCard).getByRole('button', { name: /Clear day/i }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /Clear whole day/i }));
     expect(mondayCard).toHaveTextContent('Unscheduled');
 
     await userEvent.click(within(mondayCard).getByRole('button', { name: /Add easy run/i }));
@@ -316,6 +318,122 @@ describe('PlansPage', () => {
     ]);
   });
 
+  test('deletes one session without clearing the rest of the day', async () => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    const mondayCard = (await screen.findByRole('button', { name: /Select Mon/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Add double threshold/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Select Mon/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /Edit/i });
+    await userEvent.click(within(dialog).getByRole('button', { name: /Delete session 2/i }));
+
+    expect(within(dialog).getByDisplayValue('Threshold intervals')).toBeInTheDocument();
+    expect(within(dialog).queryByDisplayValue('Threshold tempo')).not.toBeInTheDocument();
+    expect(mondayCard).toHaveTextContent('1 session');
+    expect(mondayCard).not.toHaveTextContent('Threshold tempo');
+  });
+
+  test('moves one selected session to another day', async () => {
+    const fetchMock = vi.fn((url: string, _init?: RequestInit) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    const mondayCard = (await screen.findByRole('button', { name: /Select Mon/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
+    const tuesdayCard = screen.getByRole('button', { name: /Select Tue/i }).closest('[data-testid="week-board-day"]') as HTMLElement;
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Add double threshold/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Select Mon/i }));
+
+    await userEvent.click(screen.getByRole('button', { name: /Move session 2 later/i }));
+
+    expect(mondayCard).toHaveTextContent('Threshold intervals');
+    expect(mondayCard).not.toHaveTextContent('Threshold tempo');
+    expect(tuesdayCard).toHaveTextContent('Threshold tempo');
+  });
+
+  test('adds the requested session to the workout pool', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (url.includes('/workout-pool') && init?.method === 'POST') {
+        return Promise.resolve(
+          jsonResponse({
+            id: 'pool-threshold',
+            source_template_id: null,
+            workout_type: 'tempo',
+            title: 'Threshold tempo',
+            target_duration_s: 2700,
+            target_distance_m: null,
+            target_intensity: 'hard',
+            instructions: 'Afternoon work.',
+          }),
+        );
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    const mondayCard = (await screen.findByRole('button', { name: /Select Mon/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Add double threshold/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Select Mon/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Add session 2 to pool/i }));
+
+    await waitFor(() => expect(calls.some(([url, init]) => url.includes('/workout-pool') && init?.method === 'POST')).toBe(true));
+    const createPoolCall = calls.find(([url, init]) => url.includes('/workout-pool') && init?.method === 'POST');
+    expect(JSON.parse(String(createPoolCall?.[1]?.body))).toEqual(
+      expect.objectContaining({ title: 'Threshold tempo', workout_type: 'tempo', target_duration_s: 2700 }),
+    );
+  });
+
   test('requires confirmation before replacing planned sessions with rest', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const fetchMock = vi.fn((url: string) => {
@@ -340,16 +458,218 @@ describe('PlansPage', () => {
 
     const mondayCard = (await screen.findByRole('button', { name: /Select Mon/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
     await userEvent.click(within(mondayCard).getByRole('button', { name: /Add easy run/i }));
-    await userEvent.click(within(mondayCard).getByRole('button', { name: /Mark rest/i }));
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Select Mon/i }));
+    const dialog = screen.getByRole('dialog', { name: /Edit/i });
+    await userEvent.click(within(dialog).getByRole('button', { name: /Mark whole day rest/i }));
 
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringMatching(/delete 1 planned session/i));
     expect(mondayCard).toHaveTextContent('Easy run');
 
     confirmSpy.mockReturnValue(true);
-    await userEvent.click(within(mondayCard).getByRole('button', { name: /Mark rest/i }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /Mark whole day rest/i }));
 
     expect(mondayCard).toHaveTextContent('Rest day');
     confirmSpy.mockRestore();
+  });
+
+  test('shows unsaved state and disables saving when the week is clean', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/calendar/week') && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    const saveButton = await screen.findByRole('button', { name: /Save week/i });
+    expect(saveButton).toBeDisabled();
+
+    const mondayCard = (await screen.findByRole('button', { name: /Select Mon/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Add easy run/i }));
+
+    expect(screen.getByText(/Unsaved changes/i)).toBeInTheDocument();
+    expect(saveButton).toBeEnabled();
+
+    await userEvent.click(saveButton);
+
+    await waitFor(() => expect(screen.queryByText(/Unsaved changes/i)).not.toBeInTheDocument());
+    expect(saveButton).toBeDisabled();
+  });
+
+  test('keeps demo planning in a clearly read-only state', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (url.includes('/auth/me')) {
+        return Promise.resolve(
+          jsonResponse({
+            id: 'demo-user',
+            email: 'demo@example.com',
+            display_name: 'Demo user',
+            is_demo: true,
+            timezone: 'Europe/Prague',
+            units: 'metric',
+          }),
+        );
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(
+          jsonResponse([
+            {
+              id: 'easy-template',
+              name: 'Easy run',
+              workout_type: 'easy',
+              title: 'Easy run',
+              target_duration_s: 2700,
+              target_distance_m: 7000,
+              target_intensity: 'easy',
+              instructions: 'Run easy.',
+            },
+          ]),
+        );
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText(/Read-only demo/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Save week/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Copy previous week/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Copy to next week/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /^Add$/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Use Easy run on selected day/i })).toBeDisabled();
+
+    const mondayCard = (await screen.findByRole('button', { name: /Select Mon/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
+    expect(within(mondayCard).getByRole('button', { name: /Add easy run/i })).toBeDisabled();
+    expect(screen.queryByText(/Unsaved changes/i)).not.toBeInTheDocument();
+    expect(calls.some(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST')).toBe(false);
+  });
+
+  test('shows day quick actions only for the selected day card', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    const mondayCard = (await screen.findByRole('button', { name: /Select Mon/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
+    const tuesdayCard = screen.getByRole('button', { name: /Select Tue/i }).closest('[data-testid="week-board-day"]') as HTMLElement;
+
+    expect(within(mondayCard).getByRole('button', { name: /Add easy run/i })).toBeInTheDocument();
+    expect(within(tuesdayCard).queryByRole('button', { name: /Add easy run/i })).not.toBeInTheDocument();
+
+    await userEvent.click(within(tuesdayCard).getByRole('button', { name: /Select Tue/i }));
+
+    expect(within(mondayCard).queryByRole('button', { name: /Add easy run/i })).not.toBeInTheDocument();
+    expect(within(tuesdayCard).getByRole('button', { name: /Add easy run/i })).toBeInTheDocument();
+  });
+
+  test('separates destructive day editor actions and names icon buttons with tooltips', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    const mondayCard = (await screen.findByRole('button', { name: /Select Mon/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Add double threshold/i }));
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Select Mon/i }));
+
+    const dialog = screen.getByRole('dialog', { name: /Edit/i });
+    const primaryActions = dialog.querySelector('.day-editor-primary-actions') as HTMLElement;
+    const dangerActions = dialog.querySelector('.day-editor-danger-actions') as HTMLElement;
+
+    expect(primaryActions).not.toBeNull();
+    expect(dangerActions).not.toBeNull();
+    expect(within(primaryActions).getByRole('button', { name: /Add easy run/i })).toBeInTheDocument();
+    expect(within(primaryActions).getByRole('button', { name: /Add double threshold/i })).toBeInTheDocument();
+    expect(within(dangerActions).getByRole('button', { name: /Mark whole day rest/i })).toBeInTheDocument();
+    expect(within(dangerActions).getByRole('button', { name: /Clear whole day/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: /Delete session 1/i })).toHaveAttribute('title', 'Delete session 1');
+    expect(within(dialog).getByRole('button', { name: /Move session 1 later/i })).toHaveAttribute('title', 'Move session 1 later');
+  });
+
+  test('uses Czech singular label for one session', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="cs-CZ">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    const mondayCard = (await screen.findByRole('button', { name: /Vybrat po/i })).closest('[data-testid="week-board-day"]') as HTMLElement;
+    await userEvent.click(within(mondayCard).getByRole('button', { name: /Přidat lehký běh/i }));
+
+    expect(mondayCard).toHaveTextContent('1 trénink');
+    expect(mondayCard).not.toHaveTextContent('1 tréninky');
   });
 
   test('applies a dragged template to a dropped day', async () => {
@@ -446,7 +766,7 @@ describe('PlansPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /Select Tue/i }));
     expect(screen.getByRole('dialog', { name: /Edit/i })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: /Move later/i }));
+    await userEvent.click(screen.getByRole('button', { name: /Move session 1 later/i }));
 
     const wednesdayCard = screen.getByRole('button', { name: /Select Wed/i }).closest('[data-testid="week-board-day"]') as HTMLElement;
     expect(wednesdayCard).toHaveTextContent('Copied easy run');

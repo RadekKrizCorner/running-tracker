@@ -23,6 +23,7 @@ from app.schemas.event import (
     EventUpdate,
 )
 from app.services.analytics_service import RUNNING_TYPES
+from app.services.planning_service import deduplicate_planned_workouts_by_session
 
 
 def create_event(session: Session, user: User, payload: EventCreate) -> Event:
@@ -154,11 +155,11 @@ def calculate_event_preparation(session: Session, user: User, event: Event, toda
     current_activities = _activities_between(session, user, four_week_start, current_date)
     eight_week_activities = _activities_between(session, user, eight_week_start, current_date)
     future_workouts = _planned_workouts_between(session, user.id, current_date, event.event_date)
-    missed_workouts = [
-        workout
-        for workout in _planned_workouts_between(session, user.id, four_week_start, current_date - timedelta(days=1))
-        if workout.workout_type != "rest" and workout.completed_activity_id is None and workout.status in {"planned", "skipped"}
-    ]
+    missed_workouts = _missed_planned_workouts(
+        _planned_workouts_between(session, user.id, four_week_start, current_date - timedelta(days=1)),
+        current_activities,
+        user.timezone,
+    )
     longest_run = max((float(activity.distance_m or 0) for activity in eight_week_activities), default=0.0)
     distance_m = float(event.distance_m or 0)
     return EventPreparation(
@@ -200,7 +201,7 @@ def _planned_workouts_between(session: Session, user_id: UUID, start: date, end:
     """Return planned workouts in a date window."""
     if end < start:
         return []
-    return list(
+    workouts = list(
         session.scalars(
             select(PlannedWorkout)
             .where(
@@ -210,6 +211,43 @@ def _planned_workouts_between(session: Session, user_id: UUID, start: date, end:
             )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
         )
+    )
+    return deduplicate_planned_workouts_by_session(workouts)
+
+
+def _missed_planned_workouts(workouts: list[PlannedWorkout], activities: list[Activity], timezone: str) -> list[PlannedWorkout]:
+    """Return planned workouts without a matching completed run."""
+    matched_activity_ids: set[UUID] = set()
+    missed: list[PlannedWorkout] = []
+    for workout in workouts:
+        if workout.workout_type == "rest" or workout.status not in {"planned", "skipped"}:
+            continue
+        activity = _match_planned_activity(workout, activities, matched_activity_ids, timezone)
+        if activity is None:
+            missed.append(workout)
+        else:
+            matched_activity_ids.add(activity.id)
+    return missed
+
+
+def _match_planned_activity(
+    workout: PlannedWorkout,
+    activities: list[Activity],
+    matched_activity_ids: set[UUID],
+    timezone: str,
+) -> Activity | None:
+    """Return a linked or same-day activity match for a planned workout."""
+    if workout.completed_activity_id is not None:
+        linked = next((activity for activity in activities if activity.id == workout.completed_activity_id), None)
+        if linked is not None and linked.id not in matched_activity_ids:
+            return linked
+    return next(
+        (
+            activity
+            for activity in activities
+            if activity.id not in matched_activity_ids and local_date(activity.start_time_utc, timezone) == workout.scheduled_date
+        ),
+        None,
     )
 
 
@@ -527,7 +565,7 @@ EVENT_GUIDANCE_COPY = {
         "future_plan_item_label": "Plán do události",
         "future_plan_item_detail": "Plánované běžecké tréninky od dneška do dne události.",
         "missed_sessions_item_label": "Vynechané tréninky",
-        "missed_sessions_item_detail": "Plánované běžecké tréninky z posledních 28 dní bez dokončené aktivity.",
+        "missed_sessions_item_detail": "Plánované běžecké tréninky z posledních 28 dní bez dokončeného běhu ve stejný den.",
         "intensity_mix_item_label": "Rozložení intenzity",
         "intensity_mix_item_detail": "Čas běhu za posledních 28 dní podle uložené intenzity aktivit.",
     },
@@ -557,7 +595,7 @@ EVENT_GUIDANCE_COPY = {
         "future_plan_item_label": "Plan to event",
         "future_plan_item_detail": "Planned running sessions from today through event day.",
         "missed_sessions_item_label": "Missed sessions",
-        "missed_sessions_item_detail": "Planned running sessions from the last 28 days without a completed activity.",
+        "missed_sessions_item_detail": "Planned running sessions from the last 28 days without a same-day completed run.",
         "intensity_mix_item_label": "Intensity mix",
         "intensity_mix_item_detail": "Running time from the last 28 days by stored activity intensity.",
     },

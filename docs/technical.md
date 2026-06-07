@@ -13,6 +13,7 @@ flowchart LR
   Worker --> DB
   Scheduler["Periodic scheduler"] --> Redis
   API --> Strava["Strava OAuth/API"]
+  API --> Valhalla["Optional Valhalla routing"]
   Worker --> Strava
   Worker --> Elevation["Optional elevation provider"]
   FrontendMaps["MapLibre components"] --> Tiles["OpenStreetMap raster tiles"]
@@ -30,6 +31,7 @@ The frontend is a React application created with Vite. `frontend/src/app/provide
 - `worker`: RQ worker for background jobs.
 - `scheduler`: periodic Strava sync enqueue loop and optional daily portfolio demo refresh.
 - `frontend`: Vite dev server in local compose, Nginx static frontend in prod compose.
+- `valhalla`: local Kubernetes routing service that builds Czech Republic OpenStreetMap data into public-path routing tiles.
 
 ## Configuration
 
@@ -48,9 +50,9 @@ Important values:
 - `DEMO_ACCOUNT_ENABLED`, `DEMO_ACCOUNT_EMAIL`, `DEMO_ACCOUNT_PASSWORD`, `DEMO_ACCOUNT_DISPLAY_NAME`
 - `DEMO_REFRESH_ENABLED`, `DEMO_REFRESH_INTERVAL_SECONDS`, `DEMO_REFRESH_FROM_OWNER_PATTERNS`, `DEMO_REFRESH_HISTORY_WEEKS`
 - `ROUTING_ENABLED`, `ROUTING_PROVIDER`, `VALHALLA_BASE_URL`, `ROUTE_SUGGESTION_MAX_DISTANCE_M`, `ROUTE_SUGGESTION_MIN_LAT`, `ROUTE_SUGGESTION_MAX_LAT`, `ROUTE_SUGGESTION_MIN_LNG`, `ROUTE_SUGGESTION_MAX_LNG`
-- `VITE_API_BASE_URL`, `VITE_BASE_PATH`
+- `VITE_API_BASE_URL`, `VITE_BASE_PATH`, `VITE_MAP_TILE_URL`, `VITE_MAP_TILE_ATTRIBUTION`
 
-Production cookies become secure when `APP_ENV=production` and `APP_BASE_URL` starts with `https://`.
+When `APP_ENV=production`, startup validates that public app URLs use HTTPS and that secret, token encryption, owner, Strava, demo, and enabled routing settings are not left as placeholders. Production cookies become secure when `APP_ENV=production` and `APP_BASE_URL` starts with `https://`.
 
 ## Authentication And Ownership
 
@@ -80,7 +82,7 @@ The optional portfolio demo account is represented by `users.is_demo=true`. `POS
 ### Owner And Preferences
 
 - `users`: owner and optional demo account records with email, password hash, display name, timezone, units, `is_demo`, and timestamps.
-- `user_preferences`: locale, dashboard mode, favorite/recent template IDs, pace zones, elevation correction settings, avatar icon, and uploaded avatar data URL.
+- `user_preferences`: locale, dashboard mode, favorite/recent template IDs, pace zones, elevation correction settings, avatar icon, uploaded avatar data URL, and the default Route Explorer start coordinate/label.
 
 ### Provider Integration
 
@@ -183,7 +185,7 @@ All routes below are under `/api/v1` unless noted. All routes require authentica
 
 ### Routes
 
-- `POST /routes/suggest-loop`: owner-authenticated loop route suggestions from a start coordinate and route preferences. Routing is disabled by default and returns `status="unavailable"` until local Valhalla is configured.
+- `POST /routes/suggest-loop`: owner-authenticated loop route suggestions from a start coordinate and route preferences. `valhalla` uses the configured local Valhalla service for public-path routes; `local_demo` remains an explicit test/demo provider for approximate routes.
 
 ### Events
 
@@ -229,8 +231,8 @@ All routes below are under `/api/v1` unless noted. All routes require authentica
 - `GET /profile/hr-zones`: list HR zone history.
 - `POST /profile/hr-zones`: create or replace one dated zone set and recompute HR stream metrics.
 - `POST /profile/hr-zones/recompute`: recompute HR-based load/intensity.
-- `GET /profile/preferences`: get or create preferences.
-- `PATCH /profile/preferences`: update preferences.
+- `GET /profile/preferences`: get or create preferences, including the optional default route start coordinate.
+- `PATCH /profile/preferences`: update preferences, including `route_start_lat`, `route_start_lng`, and `route_start_label`.
 - `POST /profile/elevation/recompute`: recompute GPS-based elevation for matching activities.
 
 ### Gear
@@ -274,7 +276,7 @@ Weekly metrics are fully recomputed for the owner when requested by analytics or
 
 Detailed trend metrics are calculated on demand from activities, streams, HR zones, and planned workouts. They include HR zone time, easy pace, long-run share, run-day count, hilliness, pace by HR zone, plan adherence, monotony, and coach-effect codes.
 
-Event preparation is calculated from owner-local dates, recent activity windows, future planned workouts, target distance/time, missed sessions, and event status. Event readiness is a live response built on the same owner-scoped data, adding recent run count, intensity mix, readiness items, and non-medical guidance messages for the event detail cockpit.
+Event preparation is calculated from owner-local dates, recent activity windows, future planned workouts, target distance/time, missed sessions, and event status. Missed event sessions use deduplicated planned workouts and are matched against explicit completed activity links or same-day owner-local running activities. Event readiness is a live response built on the same owner-scoped data, adding recent run count, intensity mix, readiness items, and non-medical guidance messages for the event detail cockpit.
 
 ## Strava Sync
 
@@ -393,7 +395,7 @@ Feature API modules define TanStack Query hooks:
 - `AppShell`: sidebar, mobile bottom nav, today card, notifications popover, avatar editor, logout.
 - UI primitives: `Drawer`, `EmptyState`, `MetricCard`, `PageHeader`, `ProgressMeter`, `StatusPill`.
 - Charts: `WeeklyCharts.tsx`, `TrendMetricCharts.tsx` based on Recharts.
-- Maps: `ActivityMap.tsx` and `RunHeatmap.tsx` based on dynamic MapLibre imports and OpenStreetMap raster tiles.
+- Maps: `ActivityMap.tsx`, `RunHeatmap.tsx`, and `RouteCandidateMap.tsx` use dynamic MapLibre imports and the shared map style in `components/maps/mapStyle.ts`. `VITE_MAP_TILE_URL` and `VITE_MAP_TILE_ATTRIBUTION` can override the browser tile source at frontend build time.
 - Visuals: `RunnerScene.tsx`, a code-native SVG scene used for heroes and empty states.
 
 ### Frontend Utilities

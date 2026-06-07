@@ -2,8 +2,18 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from cryptography.fernet import Fernet
 from pydantic import AnyHttpUrl, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PRODUCTION_ENVS = {"production", "prod"}
+PLACEHOLDER_VALUES = {
+    "",
+    "replace-me",
+    "replace-with-fernet-key",
+    "replace-me-with-a-long-random-secret",
+    "you@example.com",
+}
 
 
 class Settings(BaseSettings):
@@ -71,3 +81,52 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Return cached application settings."""
     return Settings()
+
+
+def validate_runtime_settings(settings: Settings) -> None:
+    """Validate runtime settings that are unsafe in production."""
+    if settings.app_env.strip().lower() not in PRODUCTION_ENVS:
+        return
+
+    _require_https_url("APP_BASE_URL", settings.app_base_url)
+    _require_https_url("FRONTEND_BASE_URL", settings.frontend_base_url)
+    _require_non_placeholder("SECRET_KEY", settings.secret_key, min_length=32)
+    _require_fernet_key(settings.token_encryption_key)
+    _require_non_placeholder("OWNER_EMAIL", settings.owner_email)
+    _require_non_placeholder("STRAVA_CLIENT_ID", settings.strava_client_id)
+    _require_non_placeholder("STRAVA_CLIENT_SECRET", settings.strava_client_secret, min_length=16)
+    _require_https_url("STRAVA_REDIRECT_URI", settings.strava_redirect_uri)
+    if settings.demo_account_enabled:
+        _require_non_placeholder("DEMO_ACCOUNT_PASSWORD", settings.demo_account_password, min_length=10)
+    if settings.routing_enabled and settings.routing_provider == "valhalla":
+        _require_non_placeholder("VALHALLA_BASE_URL", settings.valhalla_base_url or "")
+
+
+def _require_https_url(field_name: str, value: str) -> None:
+    """Raise when a production URL is not HTTPS."""
+    if not value.strip().lower().startswith("https://"):
+        raise RuntimeError(f"{field_name} must use https:// in production")
+
+
+def _require_non_placeholder(field_name: str, value: str, min_length: int = 1) -> None:
+    """Raise when a production setting is blank, short, or a placeholder."""
+    cleaned = value.strip()
+    if len(cleaned) < min_length or _is_placeholder(cleaned):
+        raise RuntimeError(f"{field_name} must be configured for production")
+
+
+def _require_fernet_key(value: str) -> None:
+    """Raise when the production token encryption key is invalid."""
+    cleaned = value.strip()
+    if _is_placeholder(cleaned):
+        raise RuntimeError("TOKEN_ENCRYPTION_KEY must be configured for production")
+    try:
+        Fernet(cleaned.encode("utf-8"))
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("TOKEN_ENCRYPTION_KEY must be a valid Fernet key") from exc
+
+
+def _is_placeholder(value: str) -> bool:
+    """Return whether a setting value is a known placeholder."""
+    normalized = value.strip().lower()
+    return normalized in PLACEHOLDER_VALUES or normalized.startswith("replace-")

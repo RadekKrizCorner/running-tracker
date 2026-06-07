@@ -30,6 +30,27 @@ async def validation_exception_handler(
     """Return the project error response format for validation errors."""
     return JSONResponse(
         status_code=422,
-        content={"detail": "Request validation failed", "code": "VALIDATION_ERROR", "errors": exc.errors()},
+        content={
+            "detail": "Request validation failed",
+            "code": "VALIDATION_ERROR",
+            "errors": _sanitized_validation_errors(exc.errors()),
+        },
     )
 
+
+def _sanitized_validation_errors(errors: list[dict]) -> list[dict]:
+    """Return validation errors without submitted input values."""
+    return [_strip_validation_input(error) for error in errors]
+
+
+def _strip_validation_input(value):
+    """Recursively strip submitted input values from validation error details."""
+    if isinstance(value, dict):
+        return {key: _strip_validation_input(item) for key, item in value.items() if key != "input"}
+    if isinstance(value, list):
+        return [_strip_validation_input(item) for item in value]
+    if isinstance(value, tuple):
+        return [_strip_validation_input(item) for item in value]
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    return str(value)

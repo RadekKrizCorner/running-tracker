@@ -41,6 +41,7 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [activeReportId, setActiveReportId] = useState('');
   const [values, setValues] = useState<ReportValues>(defaultReportValues());
+  const [theme, setTheme] = useState<Record<string, unknown>>({});
   const [templateName, setTemplateName] = useState('');
   const [previewSvg, setPreviewSvg] = useState('');
   const [rendering, setRendering] = useState(false);
@@ -55,6 +56,7 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
       setSelectedTemplateId(firstTemplate.id);
       setTemplateName(`${firstTemplate.name} kopie`);
       setValues(mergeReportValues(defaultReportValues(), firstTemplate.field_defaults));
+      setTheme(templateTheme(firstTemplate.theme));
     }
   }, [selectedTemplateId, templates]);
 
@@ -65,6 +67,7 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
     if (template) {
       setTemplateName(`${template.name} kopie`);
       setValues(mergeReportValues(defaultReportValues(), template.field_defaults));
+      setTheme(templateTheme(template.theme));
       setPreviewSvg('');
     }
   };
@@ -81,7 +84,7 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
   const previewReport = async () => {
     setRendering(true);
     try {
-      setPreviewSvg(await renderReportSvg({ values, template: renderTemplateConfig(selectedTemplate) }));
+      setPreviewSvg(await renderReportSvg({ values, template: renderTemplateConfig(selectedTemplate, theme) }));
     } finally {
       setRendering(false);
     }
@@ -90,7 +93,7 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
   const exportReport = async (format: 'svg' | 'png') => {
     setRendering(true);
     try {
-      await downloadRenderedReport({ values, template: renderTemplateConfig(selectedTemplate) }, format);
+      await downloadRenderedReport({ values, template: renderTemplateConfig(selectedTemplate, theme) }, format);
     } finally {
       setRendering(false);
     }
@@ -121,6 +124,7 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
     setSelectedTemplateId(report.template_id ?? '');
     setTemplateName(report.title);
     setValues(mergeReportValues(defaultReportValues(), report.values));
+    setTheme(templateTheme(templates.find((template) => template.id === report.template_id)?.theme));
     onWeekStartChange(report.period_start);
     setPreviewSvg('');
   };
@@ -138,12 +142,13 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
       name: templateName.trim() || t('reports.builderNewTemplate'),
       description: baseTemplate.description,
       format: baseTemplate.format,
-      theme: baseTemplate.theme,
+      theme,
       sections: baseTemplate.sections,
       field_defaults: values,
       is_default: false,
     });
     setSelectedTemplateId(created.id);
+    setTheme(templateTheme(created.theme));
   };
 
   return (
@@ -206,7 +211,13 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
         onLoad={loadSavedReport}
       />
 
-      <ReportTemplateEditor values={values} onChange={setValues} disabled={prefill.isPending || rendering} />
+      <ReportTemplateEditor
+        disabled={prefill.isPending || rendering}
+        theme={theme}
+        values={values}
+        onChange={setValues}
+        onThemeChange={setTheme}
+      />
 
       <div className="report-builder-save-row">
         <label className="report-field">
@@ -247,7 +258,14 @@ export function ReportGenerator({ weekStart, onWeekStartChange }: ReportGenerato
             {t('reports.builderExportPng')}
           </button>
         </div>
-        <iframe className="report-builder-preview" title={t('reports.builderPreviewTitle')} srcDoc={previewSvg} />
+        <div className="report-builder-preview-frame">
+          <iframe
+            className="report-builder-preview"
+            sandbox=""
+            title={t('reports.builderPreviewTitle')}
+            srcDoc={previewSvg ? reportPreviewDocument(previewSvg) : ''}
+          />
+        </div>
       </div>
     </section>
   );
@@ -347,6 +365,10 @@ function mergeReportValues(base: ReportValues, next: ReportValues): ReportValues
   };
 }
 
+function reportPreviewDocument(svg: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8" /><style>html,body{margin:0;min-height:100%;background:#0b1020;}body{display:flex;justify-content:center;align-items:flex-start;}svg{display:block;width:100%;height:auto;max-width:100%;}</style></head><body>${svg}</body></html>`;
+}
+
 function defaultTemplate(): ReportTemplate {
   return {
     id: '',
@@ -362,12 +384,13 @@ function defaultTemplate(): ReportTemplate {
   };
 }
 
-function renderTemplateConfig(template: ReportTemplate | undefined): ReportTemplateRenderConfig | undefined {
-  if (!template) {
-    return undefined;
-  }
+function renderTemplateConfig(template: ReportTemplate | undefined, theme: Record<string, unknown>): ReportTemplateRenderConfig {
   return {
-    theme: template.theme,
-    sections: template.sections,
+    theme,
+    sections: template?.sections ?? [],
   };
+}
+
+function templateTheme(theme: Record<string, unknown> | undefined): Record<string, unknown> {
+  return theme ? { ...theme } : {};
 }

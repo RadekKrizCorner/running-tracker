@@ -82,6 +82,6 @@ Event readiness uses the same live owner-scoped event preparation data and adds 
 - Recent 4-week run count, distance, load, and intensity mix from completed running activities in the last 28 owner-local days.
 - Longest 8-week run and its ratio to the event distance.
 - Planned distance, planned load, and planned non-rest session count from today through event day.
-- Missed planned sessions from the last 28 days before today.
+- Missed planned sessions from the last 28 days before today. Planned workouts are deduplicated by logical session slot, and a planned running session is treated as completed when it has an explicit completed activity link or a completed running activity on the same owner-local date.
 - Readiness items with `good`, `watch`, `missing`, or `neutral` status. These statuses describe data availability and training context only.
 - Guidance messages using transparent, non-medical wording.

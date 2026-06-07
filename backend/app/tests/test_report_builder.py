@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
+import re
 
 import pytest
 from fastapi.testclient import TestClient
@@ -151,8 +152,24 @@ def test_report_render_handles_non_finite_numeric_strings(client: TestClient) ->
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("image/svg+xml")
     assert "Non finite report" in response.text
-    assert "nan" not in response.text.lower()
-    assert "inf" not in response.text.lower()
+    visible_markup = _without_data_uris(response.text)
+    assert "nan" not in visible_markup.lower()
+    assert "inf" not in visible_markup.lower()
+
+
+def test_report_render_rejects_oversized_payloads(client: TestClient) -> None:
+    """Verify report rendering rejects oversized submitted values."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={"values": {"title": "x" * 70000}},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["code"] == "VALIDATION_ERROR"
+    assert "x" * 100 not in str(payload)
 
 
 def test_report_render_uses_template_theme_and_section_labels(client: TestClient) -> None:
@@ -208,6 +225,205 @@ def test_report_render_recomputes_volume_difference(client: TestClient) -> None:
     assert response.status_code == 200
     assert "-10,0 km" in response.text
     assert "+999,0 km" not in response.text
+
+
+def test_report_render_fits_long_story_copy(client: TestClient) -> None:
+    """Verify report story text is constrained to the Instagram layout."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={
+            "values": {
+                "title": "Long copy report",
+                "summary_lines": [
+                    "Solidní týden s 4 zaznamenanými běhy.",
+                    "Objem byl nižší než plán, ale tréninky proběhly pravidelně.",
+                ],
+                "went_well": [
+                    "4 běhy dokončené v tomto týdnu",
+                    "pravidelný pohyb a dobrý základ týdne",
+                ],
+                "focus_next": [
+                    "doplnit chybějící kilometry bez zbytečného hrocení",
+                    "držet pravidelnost po celý týden",
+                ],
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    assert "Objem byl nižší než plán, ale tréninky proběhly pravidelně." not in response.text
+    assert "Objem byl nižší než plán, ale tréninky" in response.text
+    assert "proběhly pravidelně." in response.text
+    final_summary_line = re.search(r'y="(?P<y>\d+)" class="font body">proběhly pravidelně\.</text>', response.text)
+    assert final_summary_line is not None
+    assert int(final_summary_line.group("y")) <= 704
+    assert "doplnit chybějící kilometry bez zbytečného hrocení" not in response.text
+    assert "doplnit chybějící kilometry bez" in response.text
+
+
+def test_report_render_adds_metric_card_icons(client: TestClient) -> None:
+    """Verify report metric cards include integrated visual icons."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={
+            "values": {
+                "title": "Metric icon report",
+                "stats": {
+                    "runs": "4",
+                    "time": "2 h 59 min",
+                    "plan_vs_actual": "41,0 / 26,0 km",
+                    "longest_run": "9,1 km",
+                    "avg_pace": "6:53 min/km",
+                    "training_adherence": "4/5",
+                },
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    for icon_name in ["runs", "time", "volume", "longest", "pace", "adherence"]:
+        assert f'data-report-icon="{icon_name}"' in response.text
+    assert response.text.count('data-report-icon-size="88"') == 6
+    assert response.text.count('class="metricIconHalo"') == 6
+    assert 'class="metricIconBadge"' not in response.text
+    assert 'transform="translate(254 770)"' in response.text
+    assert 'transform="translate(739 1190)"' in response.text
+    assert 'data-report-metric-value="Plán vs. skutečnost" text-anchor="middle"' in response.text
+
+
+def test_report_render_centers_and_enlarges_metric_card_icons(client: TestClient) -> None:
+    """Verify report metric icons are centered and visually larger in cards."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={"values": {"title": "Centered icon report"}},
+    )
+
+    assert response.status_code == 200
+    assert response.text.count('data-report-icon-size="88"') == 6
+    assert 'transform="translate(254 770)"' in response.text
+    assert 'transform="translate(739 1190)"' in response.text
+    assert 'data-report-metric-label="Tréninky" text-anchor="middle"' in response.text
+    assert 'data-report-metric-value="Nejdelší běh" text-anchor="middle"' in response.text
+
+
+def test_report_render_fits_metric_text_and_volume_labels(client: TestClient) -> None:
+    """Verify report metric and volume text stays inside its boxes."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={
+            "values": {
+                "title": "Overflow report",
+                "stats": {
+                    "runs": "1234567890 běžeckých tréninků",
+                    "time": "123 h 59 min plus extra",
+                    "plan_vs_actual": "1234567890,0 / 987654321,0 kilometrů",
+                    "longest_run": "1234567890,0 km ultradlouhý běh",
+                    "avg_pace": "123:45 min/km s poznámkou",
+                    "training_adherence": "1234567890/9876543210",
+                },
+                "volume": {"planned": 1234567890, "actual": 987654321},
+            }
+        },
+    )
+
+    assert response.status_code == 200
+    assert 'data-report-metric-value="Plán vs. skutečnost" text-anchor="middle"' in response.text
+    assert 'data-report-metric-value="Plán vs. skutečnost" text-anchor="middle" style="font-size:' in response.text
+    assert 'data-report-metric-label="Dodržení tréninků" text-anchor="middle" textLength="' in response.text
+    assert '<text x="106" y="1623" class="font tiny">Skutečnost</text>' in response.text
+    assert '<rect x="282" y="1595" width="578" height="32" rx="16" fill="' in response.text
+    assert re.search(r'data-report-volume-value="actual"[^>]+textLength="', response.text) is not None
+
+
+@pytest.mark.parametrize(
+    ("variant", "expected_marker"),
+    [
+        ("race_bib", 'data-report-accent="race-bib"'),
+        ("track_lines", 'data-report-accent="track-lines"'),
+        ("coach_notes", 'data-report-accent="coach-notes"'),
+        ("medal_glow", 'data-report-accent="medal-glow"'),
+        ("minimal_premium", 'data-report-accent="minimal-premium"'),
+    ],
+)
+def test_report_render_supports_visual_variants(
+    client: TestClient,
+    variant: str,
+    expected_marker: str,
+) -> None:
+    """Verify report rendering supports named visual variants."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={
+            "values": {"title": f"{variant} report"},
+            "template": {"theme": {"variant": variant}},
+        },
+    )
+
+    assert response.status_code == 200
+    assert f'data-report-variant="{variant}"' in response.text
+    assert expected_marker in response.text
+    assert 'data-report-avatar-style="reference-clip"' in response.text
+
+
+def test_report_render_maps_legacy_playful_to_track_lines(client: TestClient) -> None:
+    """Verify old playful templates render as the cleaner track lines variant."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={
+            "values": {"title": "Legacy playful report"},
+            "template": {"theme": {"variant": "playful"}},
+        },
+    )
+
+    assert response.status_code == 200
+    assert 'data-report-variant="track_lines"' in response.text
+    assert 'data-report-accent="track-lines"' in response.text
+    assert 'id="playfulDots"' not in response.text
+
+
+def test_report_render_keeps_header_avatar(client: TestClient) -> None:
+    """Verify report rendering keeps the user avatar in the header."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={"values": {"title": "Avatar report"}},
+    )
+
+    assert response.status_code == 200
+    assert 'data-report-avatar="header"' in response.text
+    assert 'data-report-avatar-source="' in response.text
+    assert 'transform="translate(820 42)"' in response.text
+    assert 'data-report-avatar-style="reference-clip"' in response.text
+    assert 'clip-path="url(#headerAvatarClip)"' in response.text
+    assert 'preserveAspectRatio="xMidYMid slice"' in response.text
+    assert '<path d="M34 43 L24 18' not in response.text
+
+
+def test_report_render_constrains_header_title_before_avatar(client: TestClient) -> None:
+    """Verify long report titles are constrained before the header avatar."""
+    setup_and_login(client)
+
+    response = client.post(
+        "/api/v1/reports/render.svg",
+        json={"values": {"title": "Týdenní běžecký report"}},
+    )
+
+    assert response.status_code == 200
+    assert 'data-report-title="header"' in response.text
+    assert '.title { fill: #FFFFFF; font-size: 54px; font-weight: 900; }' in response.text
 
 
 def test_saved_report_api_is_owner_scoped(client: TestClient) -> None:
@@ -406,6 +622,11 @@ def _seed_report_builder_week(client: TestClient) -> None:
             ]
         )
         session.commit()
+
+
+def _without_data_uris(value: str) -> str:
+    """Return SVG text with embedded data URIs removed."""
+    return re.sub(r'data:[^"]+', "data:removed", value)
 
 
 def _template_payload(name: str) -> dict[str, object]:

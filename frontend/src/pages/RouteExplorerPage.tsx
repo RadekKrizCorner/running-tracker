@@ -1,30 +1,45 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import { Save } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { RouteCandidateMap } from '../components/maps/RouteCandidateMap';
 import { EmptyState } from '../components/ui/EmptyState';
 import { MetricCard } from '../components/ui/MetricCard';
 import { useActivities } from '../features/activities/api';
+import { useUpdateUserPreferences, useUserPreferences } from '../features/profile/api';
 import { useSuggestLoopRoute } from '../features/routes/api';
-import type { Activity, RouteCandidate, RouteSuggestionRequest, RouteSuggestionResponse } from '../lib/api/types';
+import type { Activity, RouteCandidate, RouteSuggestionRequest, RouteSuggestionResponse, UserPreference } from '../lib/api/types';
 import { formatDate, formatDistance } from '../lib/format';
 import { enumLabel, useTranslation } from '../lib/i18n';
 
+type StartSource = 'default_gps' | 'manual_gps' | 'address';
+
 type RouteExplorerForm = {
+  startSource: StartSource;
   startLat: string;
   startLng: string;
-  targetDistanceM: string;
-  distanceToleranceM: string;
+  startLabel: string;
+  startAddress: string;
+  targetDistanceKm: string;
+  distanceToleranceKm: string;
   hillPreference: RouteSuggestionRequest['hill_preference'];
   surfacePreference: RouteSuggestionRequest['surface_preference'];
   candidateCount: string;
 };
 
+const fallbackRouteStart = {
+  lat: 50.0755,
+  lng: 14.4378,
+};
+
 const defaultForm: RouteExplorerForm = {
-  startLat: '50.0755',
-  startLng: '14.4378',
-  targetDistanceM: '12000',
-  distanceToleranceM: '800',
+  startSource: 'default_gps',
+  startLat: formatCoordinate(fallbackRouteStart.lat),
+  startLng: formatCoordinate(fallbackRouteStart.lng),
+  startLabel: '',
+  startAddress: '',
+  targetDistanceKm: '10',
+  distanceToleranceKm: '1',
   hillPreference: 'balanced',
   surfacePreference: 'mixed',
   candidateCount: '3',
@@ -35,9 +50,17 @@ export function RouteExplorerPage() {
   const [form, setForm] = useState<RouteExplorerForm>(defaultForm);
   const [response, setResponse] = useState<RouteSuggestionResponse | null>(null);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  const [defaultSaved, setDefaultSaved] = useState(false);
+  const preferences = useUserPreferences();
+  const updatePreferences = useUpdateUserPreferences();
   const previousRoutes = useActivities({ sport_type: 'Run', sort: '-start_time' });
   const suggestion = useSuggestLoopRoute();
   const candidates = response?.candidates ?? [];
+  const defaultStart = routeStartFromPreferences(preferences.data);
+  const defaultGpsLabel = form.startLabel.trim() || defaultStart.label || t('routes.defaultGpsFallback');
+  const addressMode = form.startSource === 'address';
+  const startGpsValid = isStartGpsValid(form);
+  const gpsFormValid = isGpsFormValid(form);
   const selectedCandidate = useMemo(
     () => candidates.find((candidate) => candidate.id === selectedCandidateId) ?? candidates[0] ?? null,
     [candidates, selectedCandidateId],
@@ -47,8 +70,83 @@ export function RouteExplorerPage() {
     [previousRoutes.data],
   );
 
+  useEffect(() => {
+    if (form.startSource !== 'default_gps') {
+      return;
+    }
+    const nextStart = routeStartFromPreferences(preferences.data);
+    const nextLat = formatCoordinate(nextStart.lat);
+    const nextLng = formatCoordinate(nextStart.lng);
+    const nextLabel = nextStart.label ?? '';
+    setForm((current) => {
+      if (current.startSource !== 'default_gps') {
+        return current;
+      }
+      if (current.startLat === nextLat && current.startLng === nextLng && current.startLabel === nextLabel) {
+        return current;
+      }
+      return { ...current, startLat: nextLat, startLng: nextLng, startLabel: nextLabel };
+    });
+  }, [
+    form.startSource,
+    preferences.data?.route_start_lat,
+    preferences.data?.route_start_lng,
+    preferences.data?.route_start_label,
+  ]);
+
+  const updateForm = (changes: Partial<RouteExplorerForm>) => {
+    setDefaultSaved(false);
+    setForm((current) => ({ ...current, ...changes }));
+  };
+
+  const changeStartSource = (startSource: StartSource) => {
+    setDefaultSaved(false);
+    if (startSource === 'default_gps') {
+      const nextStart = routeStartFromPreferences(preferences.data);
+      setForm((current) => ({
+        ...current,
+        startSource,
+        startLat: formatCoordinate(nextStart.lat),
+        startLng: formatCoordinate(nextStart.lng),
+        startLabel: nextStart.label ?? '',
+      }));
+      return;
+    }
+    setForm((current) => ({ ...current, startSource }));
+  };
+
+  const saveDefaultGps = () => {
+    if (!startGpsValid) {
+      return;
+    }
+    setDefaultSaved(false);
+    updatePreferences.mutate(
+      {
+        route_start_lat: Number(form.startLat),
+        route_start_lng: Number(form.startLng),
+        route_start_label: form.startLabel.trim() || null,
+      },
+      {
+        onSuccess: (nextPreferences) => {
+          const nextStart = routeStartFromPreferences(nextPreferences);
+          setForm((current) => ({
+            ...current,
+            startSource: 'default_gps',
+            startLat: formatCoordinate(nextStart.lat),
+            startLng: formatCoordinate(nextStart.lng),
+            startLabel: nextStart.label ?? '',
+          }));
+          setDefaultSaved(true);
+        },
+      },
+    );
+  };
+
   const submitRouteRequest = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (addressMode || !gpsFormValid) {
+      return;
+    }
     const payload = formPayload(form);
     suggestion.mutate(payload, {
       onSuccess: (nextResponse) => {
@@ -82,42 +180,105 @@ export function RouteExplorerPage() {
             </div>
           </div>
           <label>
-            <span>{t('routes.startLat')}</span>
-            <input
-              aria-label={t('routes.startLat')}
-              type="number"
-              min="-90"
-              max="90"
-              step="0.0001"
-              required
-              value={form.startLat}
-              onChange={(event) => setForm((current) => ({ ...current, startLat: event.target.value }))}
-            />
+            <span>{t('routes.startSource')}</span>
+            <select
+              aria-label={t('routes.startSource')}
+              value={form.startSource}
+              onChange={(event) => changeStartSource(event.target.value as StartSource)}
+            >
+              <option value="default_gps">{t('routes.startSource.defaultGps')}</option>
+              <option value="manual_gps">{t('routes.startSource.manualGps')}</option>
+              <option value="address">{t('routes.startSource.address')}</option>
+            </select>
           </label>
-          <label>
-            <span>{t('routes.startLng')}</span>
-            <input
-              aria-label={t('routes.startLng')}
-              type="number"
-              min="-180"
-              max="180"
-              step="0.0001"
-              required
-              value={form.startLng}
-              onChange={(event) => setForm((current) => ({ ...current, startLng: event.target.value }))}
-            />
-          </label>
+          {form.startSource === 'default_gps' ? (
+            <div className="route-default-start" aria-label={t('routes.defaultGpsLabel')}>
+              <strong>{defaultGpsLabel}</strong>
+              <span>
+                {form.startLat}, {form.startLng}
+              </span>
+            </div>
+          ) : null}
+          {addressMode ? (
+            <>
+              <label>
+                <span>{t('routes.startAddress')}</span>
+                <input
+                  aria-label={t('routes.startAddress')}
+                  type="text"
+                  value={form.startAddress}
+                  placeholder={t('routes.startAddressPlaceholder')}
+                  onChange={(event) => updateForm({ startAddress: event.target.value })}
+                />
+              </label>
+              <p className="helper-text">{t('routes.addressLookupUnavailable')}</p>
+            </>
+          ) : (
+            <>
+              <label>
+                <span>{t('routes.startLat')}</span>
+                <input
+                  aria-label={t('routes.startLat')}
+                  type="number"
+                  min="-90"
+                  max="90"
+                  step="0.0000001"
+                  required
+                  readOnly={form.startSource === 'default_gps'}
+                  value={form.startLat}
+                  onChange={(event) => updateForm({ startLat: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>{t('routes.startLng')}</span>
+                <input
+                  aria-label={t('routes.startLng')}
+                  type="number"
+                  min="-180"
+                  max="180"
+                  step="0.0000001"
+                  required
+                  readOnly={form.startSource === 'default_gps'}
+                  value={form.startLng}
+                  onChange={(event) => updateForm({ startLng: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>{t('routes.startLabel')}</span>
+                <input
+                  aria-label={t('routes.startLabel')}
+                  type="text"
+                  maxLength={255}
+                  value={form.startLabel}
+                  onChange={(event) => updateForm({ startLabel: event.target.value })}
+                />
+              </label>
+              <div className="route-action-row">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={!startGpsValid || updatePreferences.isPending}
+                  onClick={saveDefaultGps}
+                >
+                  <Save size={16} />
+                  {updatePreferences.isPending ? t('routes.savingDefaultGps') : t('routes.saveDefaultGps')}
+                </button>
+              </div>
+              {defaultSaved ? <p className="helper-text">{t('routes.defaultGpsSaved')}</p> : null}
+              {updatePreferences.isError ? <p className="form-error">{updatePreferences.error.message}</p> : null}
+            </>
+          )}
           <label>
             <span>{t('routes.targetDistance')}</span>
             <input
               aria-label={t('routes.targetDistance')}
               type="number"
-              min="500"
-              max="50000"
-              step="100"
+              min="0.5"
+              max="50"
+              step="0.1"
               required
-              value={form.targetDistanceM}
-              onChange={(event) => setForm((current) => ({ ...current, targetDistanceM: event.target.value }))}
+              value={form.targetDistanceKm}
+              onChange={(event) => updateForm({ targetDistanceKm: event.target.value })}
             />
           </label>
           <label>
@@ -125,12 +286,12 @@ export function RouteExplorerPage() {
             <input
               aria-label={t('routes.distanceTolerance')}
               type="number"
-              min="100"
-              max="10000"
-              step="100"
+              min="0.1"
+              max="10"
+              step="0.1"
               required
-              value={form.distanceToleranceM}
-              onChange={(event) => setForm((current) => ({ ...current, distanceToleranceM: event.target.value }))}
+              value={form.distanceToleranceKm}
+              onChange={(event) => updateForm({ distanceToleranceKm: event.target.value })}
             />
           </label>
           <label>
@@ -139,10 +300,9 @@ export function RouteExplorerPage() {
               aria-label={t('routes.hillPreference')}
               value={form.hillPreference}
               onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
+                updateForm({
                   hillPreference: event.target.value as RouteSuggestionRequest['hill_preference'],
-                }))
+                })
               }
             >
               <option value="flat">{t('routes.hill.flat')}</option>
@@ -156,10 +316,9 @@ export function RouteExplorerPage() {
               aria-label={t('routes.surfacePreference')}
               value={form.surfacePreference}
               onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
+                updateForm({
                   surfacePreference: event.target.value as RouteSuggestionRequest['surface_preference'],
-                }))
+                })
               }
             >
               <option value="road">{enumLabel(t, 'surface', 'road')}</option>
@@ -177,10 +336,10 @@ export function RouteExplorerPage() {
               step="1"
               required
               value={form.candidateCount}
-              onChange={(event) => setForm((current) => ({ ...current, candidateCount: event.target.value }))}
+              onChange={(event) => updateForm({ candidateCount: event.target.value })}
             />
           </label>
-          <button className="primary-button" type="submit" disabled={suggestion.isPending}>
+          <button className="primary-button" type="submit" disabled={suggestion.isPending || addressMode || !gpsFormValid}>
             {suggestion.isPending ? t('routes.generating') : t('routes.generate')}
           </button>
           {suggestion.isError ? <p className="form-error">{suggestion.error.message}</p> : null}
@@ -289,12 +448,71 @@ function formPayload(form: RouteExplorerForm): RouteSuggestionRequest {
   return {
     start_lat: Number(form.startLat),
     start_lng: Number(form.startLng),
-    target_distance_m: Number(form.targetDistanceM),
-    distance_tolerance_m: Number(form.distanceToleranceM),
+    target_distance_m: kilometersToMeters(form.targetDistanceKm),
+    distance_tolerance_m: kilometersToMeters(form.distanceToleranceKm),
     hill_preference: form.hillPreference,
     surface_preference: form.surfacePreference,
     candidate_count: Number(form.candidateCount),
   };
+}
+
+function routeStartFromPreferences(preferences: UserPreference | null | undefined) {
+  const lat = preferences?.route_start_lat;
+  const lng = preferences?.route_start_lng;
+  if (isFiniteNumber(lat) && isFiniteNumber(lng)) {
+    return {
+      lat,
+      lng,
+      label: preferences?.route_start_label ?? null,
+    };
+  }
+  return {
+    ...fallbackRouteStart,
+    label: null,
+  };
+}
+
+function isGpsFormValid(form: RouteExplorerForm) {
+  const targetDistanceKm = Number(form.targetDistanceKm);
+  const distanceToleranceKm = Number(form.distanceToleranceKm);
+  const candidateCount = Number(form.candidateCount);
+  return (
+    isStartGpsValid(form)
+    && isFiniteNumber(targetDistanceKm)
+    && targetDistanceKm >= 0.5
+    && targetDistanceKm <= 50
+    && isFiniteNumber(distanceToleranceKm)
+    && distanceToleranceKm >= 0.1
+    && distanceToleranceKm <= 10
+    && Number.isInteger(candidateCount)
+    && candidateCount >= 1
+    && candidateCount <= 6
+  );
+}
+
+function isStartGpsValid(form: RouteExplorerForm) {
+  const startLat = Number(form.startLat);
+  const startLng = Number(form.startLng);
+  return (
+    isFiniteNumber(startLat)
+    && startLat >= -90
+    && startLat <= 90
+    && isFiniteNumber(startLng)
+    && startLng >= -180
+    && startLng <= 180
+  );
+}
+
+function kilometersToMeters(value: string) {
+  return Math.round(Number(value) * 1000);
+}
+
+function formatCoordinate(value: number) {
+  return String(Number(value.toFixed(7)));
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function formatRouteDuration(seconds: number | null | undefined) {

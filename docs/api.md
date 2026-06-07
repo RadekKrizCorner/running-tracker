@@ -39,7 +39,7 @@ Demo write attempts return:
 
 `GET /api/v1/events/{event_id}/readiness` returns owner-scoped readiness context for one event. It requires authentication and returns 404 when the event does not belong to the current owner.
 
-The response includes countdown/phase, target pace, recent 4-week distance/load/run count, longest 8-week run, long-run distance ratio, planned distance/load/sessions through event day, missed planned sessions, recent intensity mix seconds, readiness items, and guidance messages. Readiness item statuses are `good`, `watch`, `missing`, or `neutral`; they are transparent planning context, not medical or injury predictions.
+The response includes countdown/phase, target pace, recent 4-week distance/load/run count, longest 8-week run, long-run distance ratio, planned distance/load/sessions through event day, missed planned sessions, recent intensity mix seconds, readiness items, and guidance messages. Missed planned sessions are deduplicated by logical planned session and matched against explicit completed activity links or same-day completed runs. Readiness item statuses are `good`, `watch`, `missing`, or `neutral`; they are transparent planning context, not medical or injury predictions.
 
 `GET /api/v1/auth/options` is public and returns whether the portfolio demo login should be shown:
 
@@ -51,7 +51,7 @@ The response includes countdown/phase, target pace, recent 4-week distance/load/
 
 ## Route Suggestions
 
-`POST /api/v1/routes/suggest-loop` requires an authenticated owner session. It does not store route suggestions. The backend calls the configured local routing provider only when `ROUTING_ENABLED=true`, `VALHALLA_BASE_URL` is set, and the start point is inside the configured route suggestion bounds. The default bounds cover the Czech Republic.
+`POST /api/v1/routes/suggest-loop` requires an authenticated owner session. It does not store route suggestions. The backend calls the configured local routing provider only when `ROUTING_ENABLED=true` and the start point is inside the configured route suggestion bounds. The default bounds cover the Czech Republic. `ROUTING_PROVIDER=local_demo` returns approximate demo loops without a routing service; `ROUTING_PROVIDER=valhalla` requires `VALHALLA_BASE_URL` and returns road-aware routes from local Valhalla.
 
 Request:
 
@@ -72,12 +72,14 @@ Response when routing is disabled or unavailable:
 ```json
 {
   "status": "unavailable",
-  "detail": "Route suggestions are disabled. Configure local Valhalla to enable this feature.",
+  "detail": "Route suggestions are disabled. Enable local demo routing or configure local Valhalla.",
   "candidates": []
 }
 ```
 
-Successful responses return `status="ok"` and candidates with distance, duration, optional elevation gain, `[lat, lng]` geometry, provider, score, and warnings.
+Successful responses return `status="ok"` and candidates with distance, duration, optional elevation gain, `[lat, lng]` geometry, provider, score, and warnings. `local_demo` candidates include a warning that the route is not snapped to roads.
+
+Route Explorer displays target distance and tolerance in kilometers, then sends `target_distance_m` and `distance_tolerance_m` to this API in meters.
 
 ## Activities List
 
@@ -104,5 +106,5 @@ Report builder endpoints are owner-scoped and authenticated.
 - `PATCH /api/v1/reports/{report_id}`: update one owner saved report draft.
 - `DELETE /api/v1/reports/{report_id}`: delete one owner saved report draft.
 - `POST /api/v1/reports/prefill`: build editable Instagram report values from one owner week of plans and completed runs.
-- `POST /api/v1/reports/render.svg`: render submitted report values to SVG.
-- `POST /api/v1/reports/render.png`: render submitted report values to PNG.
+- `POST /api/v1/reports/render.svg`: render submitted report values to SVG. Submitted values are size-limited.
+- `POST /api/v1/reports/render.png`: render submitted report values to PNG. Submitted values are size-limited.

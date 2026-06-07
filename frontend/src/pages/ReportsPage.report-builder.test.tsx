@@ -29,6 +29,9 @@ describe('ReportsPage report builder', () => {
     const preview = await screen.findByTitle('Náhled reportu');
     expect(preview).toHaveAttribute('srcdoc', expect.stringContaining('<svg'));
     expect(preview).toHaveAttribute('srcdoc', expect.stringContaining('25,4'));
+    expect(preview).toHaveAttribute('srcdoc', expect.stringContaining('svg{display:block;width:100%;height:auto'));
+    expect(preview.parentElement).toHaveClass('report-builder-preview-frame');
+    expect(preview).toHaveAttribute('sandbox', '');
 
     await userEvent.click(screen.getByRole('button', { name: 'Export SVG' }));
 
@@ -104,6 +107,46 @@ describe('ReportsPage report builder', () => {
       expect(body.template.theme).toBeDefined();
     });
   });
+
+  test('applies selected report visual variant before preview', async () => {
+    const fetchMock = reportBuilderFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    renderReportsPage();
+
+    expect(await screen.findByRole('option', { name: 'Maratonská příprava' })).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText('Vizuální styl'), { target: { value: 'medal_glow' } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Náhled SVG' }));
+
+    await waitFor(() => {
+      const renderCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/reports/render.svg'));
+      expect(renderCall).toBeDefined();
+      const body = JSON.parse(String(renderCall?.[1]?.body));
+      expect(body.template.theme).toMatchObject({ primary: '#B7FF2A', variant: 'medal_glow' });
+    });
+  });
+
+  test('saves selected report visual variant with a template copy', async () => {
+    const fetchMock = reportBuilderFetch();
+    vi.stubGlobal('fetch', fetchMock);
+    renderReportsPage();
+
+    expect(await screen.findByRole('option', { name: 'Maratonská příprava' })).toBeInTheDocument();
+    fireEvent.change(await screen.findByLabelText('Vizuální styl'), { target: { value: 'race_bib' } });
+    fireEvent.change(screen.getByLabelText('Název šablony'), { target: { value: 'Startovní report' } });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Uložit jako šablonu' }));
+
+    await waitFor(() => {
+      const templateCall = fetchMock.mock.calls.find(
+        ([url, init]) => String(url).includes('/report-templates') && init?.method === 'POST',
+      );
+      expect(templateCall).toBeDefined();
+      const body = JSON.parse(String(templateCall?.[1]?.body));
+      expect(body.name).toBe('Startovní report');
+      expect(body.theme).toMatchObject({ primary: '#B7FF2A', variant: 'race_bib' });
+    });
+  });
 });
 
 function renderReportsPage() {
@@ -149,6 +192,21 @@ function reportBuilderFetch() {
           distance_m: 123456,
           elevation_gain_m: 1234,
           moving_time_s: 43200,
+        }),
+      );
+    }
+    if (url.includes('/report-templates') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      return Promise.resolve(
+        jsonResponse({
+          id: 'template-created',
+          description: null,
+          format: 'instagram_story',
+          sections: [],
+          is_default: false,
+          created_at: '2026-06-06T13:00:00Z',
+          updated_at: '2026-06-06T13:00:00Z',
+          ...body,
         }),
       );
     }

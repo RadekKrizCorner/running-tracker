@@ -11,9 +11,14 @@ from app.schemas.route_planning import RouteCandidate, RouteSuggestionRequest
 VALHALLA_PROVIDER = "valhalla"
 EARTH_RADIUS_M = 6_371_000
 PROVIDER_UNAVAILABLE_DETAIL = "Routing provider is unavailable"
+RADIUS_SEARCH_FACTORS = (1.0, 0.82, 0.68, 1.18, 0.55, 1.35)
 
 
-def build_valhalla_loop_payload(request: RouteSuggestionRequest, bearing_degrees: float = 0) -> dict[str, Any]:
+def build_valhalla_loop_payload(
+    request: RouteSuggestionRequest,
+    bearing_degrees: float = 0,
+    radius_factor: float = 1.0,
+) -> dict[str, Any]:
     """Build a Valhalla loop route request payload."""
     pedestrian_options = {
         "walking_speed": 10,
@@ -22,7 +27,7 @@ def build_valhalla_loop_payload(request: RouteSuggestionRequest, bearing_degrees
         "max_hiking_difficulty": _max_hiking_difficulty(request.surface_preference),
     }
     return {
-        "locations": _loop_locations(request, bearing_degrees),
+        "locations": _loop_locations(request, bearing_degrees, radius_factor),
         "costing": "pedestrian",
         "costing_options": {"pedestrian": pedestrian_options},
         "directions_options": {"units": "kilometers"},
@@ -47,28 +52,21 @@ def request_valhalla_loop_routes(base_url: str, request: RouteSuggestionRequest)
     candidates: list[RouteCandidate] = []
     try:
         with httpx.Client(timeout=30) as client:
-            for bearing in _candidate_bearings(request.candidate_count):
-                payload = build_valhalla_loop_payload(request, bearing)
+            for bearing, radius_factor in _candidate_searches(request.candidate_count):
+                payload = build_valhalla_loop_payload(request, bearing, radius_factor)
                 response = client.post(url, json=payload)
                 response.raise_for_status()
                 response_payload = _response_payload(response)
                 for candidate in normalize_valhalla_response(response_payload):
-                    index = len(candidates) + 1
-                    candidates.append(
-                        candidate.model_copy(
-                            update={
-                                "id": f"valhalla-{index}",
-                                "score": _candidate_score(index, candidate.warnings),
-                            }
-                        )
-                    )
-                    if len(candidates) >= request.candidate_count:
-                        return candidates
+                    candidates.append(candidate)
+                ranked_candidates = _rank_candidates(candidates, request)
+                if _in_tolerance_count(ranked_candidates, request) >= request.candidate_count:
+                    return _numbered_candidates(ranked_candidates[: request.candidate_count])
     except httpx.HTTPError as exc:
         raise _provider_unavailable() from exc
     except Exception as exc:
         raise _provider_unavailable() from exc
-    return candidates
+    return _numbered_candidates(_rank_candidates(candidates, request))
 
 
 def _response_payload(response: httpx.Response) -> dict[str, Any]:
@@ -111,10 +109,14 @@ def _max_hiking_difficulty(preference: str) -> int:
     }.get(preference, 1)
 
 
-def _loop_locations(request: RouteSuggestionRequest, bearing_degrees: float) -> list[dict[str, float | str]]:
+def _loop_locations(
+    request: RouteSuggestionRequest,
+    bearing_degrees: float,
+    radius_factor: float,
+) -> list[dict[str, float | str]]:
     """Return start, through waypoints, and closed start locations."""
     start = {"lat": request.start_lat, "lon": request.start_lng, "type": "break"}
-    radius_m = _loop_radius_m(request.target_distance_m)
+    radius_m = _loop_radius_m(request.target_distance_m) * max(radius_factor, 0.1)
     first_waypoint = _waypoint(request.start_lat, request.start_lng, bearing_degrees, radius_m)
     second_waypoint = _waypoint(request.start_lat, request.start_lng, bearing_degrees + 120, radius_m)
     return [
@@ -127,7 +129,7 @@ def _loop_locations(request: RouteSuggestionRequest, bearing_degrees: float) -> 
 
 def _loop_radius_m(target_distance_m: int) -> float:
     """Return an approximate waypoint radius for a loop target."""
-    return max(target_distance_m / 3.75, 250)
+    return max(target_distance_m / 4.75, 250)
 
 
 def _waypoint(latitude: float, longitude: float, bearing_degrees: float, distance_m: float) -> tuple[float, float]:
@@ -153,6 +155,50 @@ def _candidate_bearings(candidate_count: int) -> list[float]:
     """Return distributed bearings for route candidates."""
     count = max(1, min(candidate_count, 6))
     return [(360 / count) * index for index in range(count)]
+
+
+def _candidate_searches(candidate_count: int) -> list[tuple[float, float]]:
+    """Return bearing and radius combinations for route search."""
+    return [
+        (bearing, radius_factor)
+        for radius_factor in RADIUS_SEARCH_FACTORS
+        for bearing in _candidate_bearings(candidate_count)
+    ]
+
+
+def _rank_candidates(candidates: list[RouteCandidate], request: RouteSuggestionRequest) -> list[RouteCandidate]:
+    """Return candidates sorted by target-distance fit."""
+    return sorted(candidates, key=lambda candidate: _candidate_distance_error(candidate, request))
+
+
+def _candidate_distance_error(candidate: RouteCandidate, request: RouteSuggestionRequest) -> float:
+    """Return absolute distance error for a route candidate."""
+    return abs(candidate.distance_m - request.target_distance_m)
+
+
+def _in_tolerance_count(candidates: list[RouteCandidate], request: RouteSuggestionRequest) -> int:
+    """Return the number of candidates inside requested tolerance."""
+    return sum(1 for candidate in candidates if _candidate_in_tolerance(candidate, request))
+
+
+def _candidate_in_tolerance(candidate: RouteCandidate, request: RouteSuggestionRequest) -> bool:
+    """Return whether a candidate is within requested distance tolerance."""
+    minimum_distance = request.target_distance_m - request.distance_tolerance_m
+    maximum_distance = request.target_distance_m + request.distance_tolerance_m
+    return minimum_distance <= candidate.distance_m <= maximum_distance
+
+
+def _numbered_candidates(candidates: list[RouteCandidate]) -> list[RouteCandidate]:
+    """Return candidates with stable ids and scores."""
+    return [
+        candidate.model_copy(
+            update={
+                "id": f"valhalla-{index}",
+                "score": _candidate_score(index, candidate.warnings),
+            }
+        )
+        for index, candidate in enumerate(candidates, start=1)
+    ]
 
 
 def _trip_payloads(payload: dict[str, Any]) -> list[dict[str, Any]]:

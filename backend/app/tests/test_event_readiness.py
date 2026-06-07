@@ -211,6 +211,89 @@ def test_event_readiness_summarizes_training_context(client, monkeypatch) -> Non
     assert readiness.guidance_messages
 
 
+def test_event_readiness_matches_unlinked_same_day_runs_before_counting_missed(client, monkeypatch) -> None:
+    """Verify readiness does not count same-day completed runs as missed workouts."""
+    import app.services.event_service as event_service
+    from app.db.session import get_session_factory
+    from app.models import Activity, Event, PlannedWorkout, User
+    from app.services.event_service import event_readiness
+
+    setup_and_login(client)
+    monkeypatch.setattr(event_service, "utc_now", lambda: datetime(2026, 6, 7, 10, 0, tzinfo=UTC))
+    with get_session_factory()() as session:
+        owner = session.scalar(select(User).where(User.email == "owner@example.com"))
+        assert owner is not None
+        owner.timezone = "Europe/Prague"
+        race = Event(
+            user_id=owner.id,
+            name="Autumn half",
+            event_date=date(2026, 10, 3),
+            event_type="half_marathon",
+            distance_m=Decimal("21100"),
+            target_time_s=7200,
+            priority="A",
+        )
+        session.add_all(
+            [
+                race,
+                Activity(
+                    user_id=owner.id,
+                    provider="manual",
+                    provider_activity_id="readiness-unlinked-run",
+                    sport_type="Run",
+                    name="Completed easy run",
+                    start_time_utc=datetime(2026, 6, 3, 16, 0, tzinfo=UTC),
+                    distance_m=Decimal("6000"),
+                    moving_time_s=2100,
+                    computed_load=Decimal("70"),
+                    intensity_class="easy",
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=date(2026, 6, 3),
+                    workout_type="easy",
+                    title="Old easy run",
+                    target_distance_m=Decimal("6000"),
+                    target_duration_s=2100,
+                    target_intensity="easy",
+                    status="planned",
+                    created_at=datetime(2026, 6, 1, 8, 0, tzinfo=UTC),
+                    updated_at=datetime(2026, 6, 1, 8, 0, tzinfo=UTC),
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=date(2026, 6, 3),
+                    workout_type="easy",
+                    title="Latest easy run",
+                    target_distance_m=Decimal("6000"),
+                    target_duration_s=2100,
+                    target_intensity="easy",
+                    status="planned",
+                    created_at=datetime(2026, 6, 2, 8, 0, tzinfo=UTC),
+                    updated_at=datetime(2026, 6, 2, 8, 0, tzinfo=UTC),
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=date(2026, 6, 4),
+                    workout_type="tempo",
+                    title="Actually missed tempo",
+                    target_distance_m=Decimal("8000"),
+                    target_duration_s=3000,
+                    target_intensity="hard",
+                    status="planned",
+                ),
+            ]
+        )
+        session.commit()
+
+        readiness = event_readiness(session, owner, race)
+
+    items = {item.key: item for item in readiness.readiness_items}
+    assert readiness.recent_4w_run_count == 1
+    assert readiness.missed_planned_sessions == 1
+    assert items["missed_sessions"].value == "1"
+
+
 def test_event_readiness_endpoint_is_owner_scoped(client, monkeypatch) -> None:
     """Verify event readiness endpoint requires auth and owner scope."""
     import app.services.event_service as event_service

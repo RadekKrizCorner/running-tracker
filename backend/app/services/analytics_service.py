@@ -74,6 +74,43 @@ def recompute_owner_weekly_metrics(session: Session, user_id: UUID) -> list[Week
     return metrics
 
 
+def ensure_owner_weekly_metrics_current(session: Session, user_id: UUID) -> None:
+    """Recompute owner weekly metrics only when stored aggregates are stale."""
+    user = session.get(User, user_id)
+    timezone = user.timezone if user is not None else "Europe/Prague"
+    if not _owner_weekly_metrics_are_current(session, user_id, timezone):
+        recompute_owner_weekly_metrics(session, user_id)
+
+
+def _owner_weekly_metrics_are_current(session: Session, user_id: UUID, timezone: str) -> bool:
+    """Return whether stored weekly metrics match the owner's activity set."""
+    activity_starts = list(
+        session.scalars(
+            select(Activity.start_time_utc)
+            .where(Activity.user_id == user_id, Activity.sport_type.in_(RUNNING_TYPES))
+            .order_by(Activity.start_time_utc)
+        )
+    )
+    metric_week_starts = set(
+        session.scalars(select(WeeklyMetric.week_start_date).where(WeeklyMetric.user_id == user_id))
+    )
+    if not activity_starts:
+        return not metric_week_starts
+    activity_week_starts = {week_start(local_date(started_at, timezone)) for started_at in activity_starts}
+    if activity_week_starts != metric_week_starts:
+        return False
+
+    latest_activity_update = session.scalar(
+        select(func.max(Activity.updated_at)).where(Activity.user_id == user_id, Activity.sport_type.in_(RUNNING_TYPES))
+    )
+    latest_metric_update = session.scalar(
+        select(func.max(WeeklyMetric.updated_at)).where(WeeklyMetric.user_id == user_id)
+    )
+    if latest_activity_update is None or latest_metric_update is None:
+        return False
+    return _utc_datetime(latest_activity_update) <= _utc_datetime(latest_metric_update)
+
+
 def _lock_owner_for_weekly_recompute(session: Session, user_id: UUID) -> User | None:
     """Lock one owner row while weekly metrics are replaced."""
     return session.scalar(select(User).where(User.id == user_id).with_for_update())
@@ -149,7 +186,7 @@ def weekly_metrics_between(
     end_date: date | None,
 ) -> list[WeeklyMetric]:
     """Return weekly metrics in a date range."""
-    recompute_owner_weekly_metrics(session, user_id)
+    ensure_owner_weekly_metrics_current(session, user_id)
     statement = select(WeeklyMetric).where(WeeklyMetric.user_id == user_id).order_by(WeeklyMetric.week_start_date)
     if start_date is not None:
         statement = statement.where(WeeklyMetric.week_start_date >= start_date)
@@ -160,7 +197,7 @@ def weekly_metrics_between(
 
 def recent_weekly_metrics(session: Session, user_id: UUID, weeks: int = 12) -> list[dict]:
     """Return dense recent weekly metrics ending at the current owner-local week."""
-    recompute_owner_weekly_metrics(session, user_id)
+    ensure_owner_weekly_metrics_current(session, user_id)
     safe_weeks = max(1, min(weeks, 52))
     user = session.get(User, user_id)
     timezone = user.timezone if user is not None else "Europe/Prague"
@@ -487,6 +524,13 @@ def _utc_activity_start(activity: Activity) -> datetime:
     if started_at.tzinfo is None:
         return started_at.replace(tzinfo=UTC)
     return started_at.astimezone(UTC)
+
+
+def _utc_datetime(value: datetime) -> datetime:
+    """Return a datetime value as timezone-aware UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _weekly_dict(metric: WeeklyMetric) -> dict:

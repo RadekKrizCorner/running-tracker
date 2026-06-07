@@ -176,6 +176,16 @@ describe('AppShell', () => {
     expect(popoverLayer).toBeGreaterThan(sidebarLayer);
   });
 
+  test('keeps the notification bell away from its button border', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+
+    expect(cssDeclaration(styles, '.notification-button', 'width')).toBe('42px');
+    expect(cssDeclaration(styles, '.notification-button', 'height')).toBe('42px');
+    expect(cssDeclaration(styles, '.notification-button', 'padding')).toBe('10px');
+    expect(cssDeclaration(styles, '.brand > div:not(.brand-actions)', 'min-width')).toBe('0');
+    expect(cssDeclaration(styles, '.brand-actions', 'margin-right')).toBe('12px');
+  });
+
   test('shows today plan details in the sidebar route card', async () => {
     const today = toIsoDate(new Date());
     vi.stubGlobal(

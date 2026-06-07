@@ -67,12 +67,12 @@ Trends cover load, durability, HR-zone time, easy pace, long-run share, plan adh
 
 ### Route Explorer
 
-Route Explorer submits owner-authenticated loop-route requests to the backend and previews generated candidates on MapLibre. Route generation is optional and disabled by default. To enable it, run a local Valhalla instance with Czech Republic routing data, then set:
+Route Explorer submits owner-authenticated loop-route requests to the backend and previews generated candidates on MapLibre. The local Kubernetes overlay runs Valhalla in-cluster with Czech Republic OpenStreetMap data, so generated routes follow public walking/running-accessible ways instead of approximate demo circles:
 
 ```dotenv
 ROUTING_ENABLED=true
 ROUTING_PROVIDER=valhalla
-VALHALLA_BASE_URL=http://localhost:8002
+VALHALLA_BASE_URL=http://valhalla:8002
 ROUTE_SUGGESTION_MAX_DISTANCE_M=50000
 ROUTE_SUGGESTION_MIN_LAT=48.5
 ROUTE_SUGGESTION_MAX_LAT=51.1
@@ -80,22 +80,9 @@ ROUTE_SUGGESTION_MIN_LNG=12.0
 ROUTE_SUGGESTION_MAX_LNG=18.9
 ```
 
-The default route suggestion bounds cover the Czech Republic. The frontend never calls Valhalla directly. If Valhalla is not configured, unavailable, or a start point falls outside the configured bounds, the app remains usable and the route endpoint returns an `unavailable` response.
+The default route suggestion bounds cover the Czech Republic. The frontend never calls Valhalla directly. If routing is disabled, Valhalla is unavailable, or a start point falls outside the configured bounds, the app remains usable and the route endpoint returns an `unavailable` response.
 
-Local Czech Republic Valhalla setup uses free OpenStreetMap data and local routing infrastructure. One practical setup is:
-
-1. Download `czech-republic-latest.osm.pbf` from Geofabrik's Europe/Czech Republic extract.
-2. Install or run Valhalla locally, then build tiles from that PBF into a local tile directory and extract:
-
-   ```bash
-   valhalla_build_config --mjolnir-tile-dir ./valhalla_tiles --mjolnir-tile-extract ./valhalla_tiles.tar > valhalla.json
-   valhalla_build_tiles -c valhalla.json czech-republic-latest.osm.pbf
-   valhalla_service valhalla.json 1
-   ```
-
-3. Confirm the local service responds on its route endpoint, then set `VALHALLA_BASE_URL` to that local service URL.
-
-Docker-based Valhalla images can be used instead of a native install, but image environment variables differ by maintainer. Keep the PBF, generated tiles, and service bound to local storage/networking for personal use.
+The first local Kubernetes Valhalla startup downloads `czech-republic-latest.osm.pbf` from Geofabrik and builds routing tiles into the `valhalla-data` PVC. That can take many minutes and may require several GiB of free disk space. Later starts reuse the PVC. `local_demo` remains available only when explicitly configured for tests or demos, and it still produces approximate routes that are not snapped to roads or trails.
 
 ### Portfolio Demo Account
 
@@ -133,6 +120,23 @@ Default local URLs:
 - Health: `http://localhost:8009/health`
 
 If those host ports are already in use, set `API_PORT` or `FRONTEND_PORT` in `.env` and update `APP_BASE_URL`, `STRAVA_REDIRECT_URI`, and `VITE_API_BASE_URL` to match the chosen API port.
+
+For the local Kubernetes deployment, expose the cluster services through detached
+localhost forwards:
+
+```bash
+scripts/k8s-port-forwards.sh start
+scripts/k8s-port-forwards.sh status
+```
+
+When `APP_ENV=production`, the API refuses to start with placeholder secrets, non-HTTPS public URLs, placeholder owner/Strava settings, missing demo passwords when demo mode is enabled, or missing Valhalla URL when Valhalla routing is enabled.
+
+On macOS, install the LaunchAgent once to start those forwards after login and
+retry until the local `kind` cluster is available:
+
+```bash
+scripts/k8s-port-forwards.sh install-launchd
+```
 
 ### Migrations
 
@@ -221,6 +225,8 @@ npm test
 npm run build
 npm run dev
 ```
+
+Map views use `VITE_MAP_TILE_URL` and `VITE_MAP_TILE_ATTRIBUTION` at frontend build time. The default tile URL uses public OpenStreetMap raster tiles; configure a different tile source if you do not want browser map views to request OpenStreetMap tiles.
 
 Production-style Compose:
 

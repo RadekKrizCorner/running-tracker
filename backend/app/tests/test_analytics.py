@@ -627,6 +627,60 @@ def test_recent_weeks_endpoint_returns_dense_intensity_window(client, monkeypatc
     assert weekly[3]["hard_time_s"] == 3000
 
 
+def test_recent_weeks_read_reuses_current_weekly_metrics(client, monkeypatch) -> None:
+    """Verify repeated weekly reads do not rebuild current aggregate rows."""
+    import app.services.analytics_service as analytics_service
+    from app.db.session import get_session_factory
+    from app.models import Activity, User, WeeklyMetric
+
+    setup_and_login(client)
+    monkeypatch.setattr(analytics_service, "utc_now", lambda: datetime(2026, 4, 29, 10, 0, tzinfo=UTC))
+    with get_session_factory()() as session:
+        owner = session.scalar(select(User).where(User.email == "owner@example.com"))
+        assert owner is not None
+        session.add(
+            Activity(
+                user_id=owner.id,
+                provider="manual",
+                provider_activity_id="cached-week",
+                sport_type="Run",
+                name="Cached weekly run",
+                start_time_utc=datetime(2026, 4, 27, 6, 0, tzinfo=UTC),
+                distance_m=Decimal("9000"),
+                moving_time_s=3000,
+                computed_load=Decimal("100"),
+                intensity_class="easy",
+            )
+        )
+        session.commit()
+
+    first_response = client.get("/api/v1/analytics/recent-weeks?weeks=4")
+    assert first_response.status_code == 200
+    with get_session_factory()() as session:
+        owner = session.scalar(select(User).where(User.email == "owner@example.com"))
+        assert owner is not None
+        first_ids = [
+            metric.id
+            for metric in session.scalars(
+                select(WeeklyMetric).where(WeeklyMetric.user_id == owner.id).order_by(WeeklyMetric.week_start_date)
+            )
+        ]
+
+    second_response = client.get("/api/v1/analytics/recent-weeks?weeks=4")
+    assert second_response.status_code == 200
+    with get_session_factory()() as session:
+        owner = session.scalar(select(User).where(User.email == "owner@example.com"))
+        assert owner is not None
+        second_ids = [
+            metric.id
+            for metric in session.scalars(
+                select(WeeklyMetric).where(WeeklyMetric.user_id == owner.id).order_by(WeeklyMetric.week_start_date)
+            )
+        ]
+
+    assert second_ids == first_ids
+
+
 def test_yearly_summary_uses_full_owner_local_calendar_year(client) -> None:
     """Verify yearly summary uses the owner's full local calendar year."""
     from app.db.session import get_session_factory

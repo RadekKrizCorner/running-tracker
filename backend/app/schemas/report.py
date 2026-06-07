@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+import json
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 ReportJson = dict[str, Any]
+REPORT_RENDER_VALUES_MAX_BYTES = 64_000
+REPORT_RENDER_TEMPLATE_MAX_BYTES = 64_000
 
 
 class ReportTemplateBase(BaseModel):
@@ -103,3 +106,17 @@ class ReportRenderRequest(BaseModel):
 
     values: ReportJson = Field(default_factory=dict)
     template: ReportJson | None = None
+
+    @model_validator(mode="after")
+    def validate_render_payload_size(self) -> "ReportRenderRequest":
+        """Validate that render payloads stay within bounded size limits."""
+        if _json_size_bytes(self.values) > REPORT_RENDER_VALUES_MAX_BYTES:
+            raise ValueError("report values payload is too large")
+        if self.template is not None and _json_size_bytes(self.template) > REPORT_RENDER_TEMPLATE_MAX_BYTES:
+            raise ValueError("report template payload is too large")
+        return self
+
+
+def _json_size_bytes(value: object) -> int:
+    """Return compact JSON size in bytes for a render payload value."""
+    return len(json.dumps(value, default=str, separators=(",", ":")).encode("utf-8"))

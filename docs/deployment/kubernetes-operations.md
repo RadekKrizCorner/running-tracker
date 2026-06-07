@@ -26,6 +26,7 @@ The app runs these Kubernetes resources:
 | Worker | `deployment/running-tracker-worker` | Executes background jobs. |
 | Scheduler | `deployment/running-tracker-scheduler` | Queues periodic Strava sync jobs. |
 | Frontend | `deployment/running-tracker-frontend`, `svc/running-tracker-frontend` | Nginx static frontend on port `8080`. |
+| Valhalla | `deployment/valhalla`, `svc/valhalla`, `pvc/valhalla-data` | Builds and serves Czech Republic routing tiles on port `8002`. |
 | Migrations | `job/running-tracker-migrate` | Runs `alembic upgrade head`. |
 | Config | `configmap/running-tracker-config` | Non-secret runtime settings. |
 | Secrets | `secret/running-tracker-secret` | App secret, token key, DB password, owner email, Strava credentials. |
@@ -66,18 +67,53 @@ kubectl -n "$NS" rollout status deployment/running-tracker-api
 kubectl -n "$NS" rollout status deployment/running-tracker-worker
 kubectl -n "$NS" rollout status deployment/running-tracker-scheduler
 kubectl -n "$NS" rollout status deployment/running-tracker-frontend
+kubectl -n "$NS" rollout status deployment/valhalla --timeout=3600s
 ```
 
 ## Open The App
 
-Keep these commands running in separate terminals:
+Kubernetes keeps the app pods running in the background. The browser reaches
+the local `kind` services through host-side port-forwards. Start or repair both
+detached forwards from the repository root:
 
 ```bash
-kubectl -n "$NS" port-forward svc/running-tracker-api 8009:8009
+scripts/k8s-port-forwards.sh start
 ```
 
+Check their status:
+
 ```bash
-kubectl -n "$NS" port-forward svc/running-tracker-frontend 8080:8080
+scripts/k8s-port-forwards.sh status
+```
+
+Stop them:
+
+```bash
+scripts/k8s-port-forwards.sh stop
+```
+
+Install the macOS LaunchAgent once if you want the forwards to start after login
+and retry every minute until the local Kubernetes cluster is available:
+
+```bash
+scripts/k8s-port-forwards.sh install-launchd
+```
+
+The installer copies the helper to `~/Library/Application Support/running-tracker/`
+before loading it, because LaunchAgents may not be allowed to execute files
+directly from `~/Documents`.
+
+The LaunchAgent writes logs to:
+
+```text
+~/Library/Logs/running-tracker/port-forwards.out.log
+~/Library/Logs/running-tracker/port-forwards.err.log
+```
+
+Remove it with:
+
+```bash
+scripts/k8s-port-forwards.sh uninstall-launchd
 ```
 
 Open:
@@ -95,13 +131,7 @@ curl http://localhost:8009/health
 If the browser DevTools request shows `strict-origin-when-cross-origin`, first check whether the API port-forward is actually running. That text is the browser referrer policy, not the backend error by itself.
 
 ```bash
-curl http://localhost:8009/health
-```
-
-If this cannot connect, keep the API port-forward open in its own terminal:
-
-```bash
-kubectl -n "$NS" port-forward svc/running-tracker-api 8009:8009
+scripts/k8s-port-forwards.sh status
 ```
 
 When the API port-forward is up, the login preflight should allow the frontend origin:
@@ -122,6 +152,7 @@ kubectl -n "$NS" logs deploy/running-tracker-api --tail=100
 kubectl -n "$NS" logs deploy/running-tracker-worker --tail=100
 kubectl -n "$NS" logs deploy/running-tracker-scheduler --tail=100
 kubectl -n "$NS" logs deploy/running-tracker-frontend --tail=100
+kubectl -n "$NS" logs deploy/valhalla --tail=100
 kubectl -n "$NS" logs job/running-tracker-migrate --tail=100
 ```
 
@@ -129,6 +160,22 @@ Follow logs:
 
 ```bash
 kubectl -n "$NS" logs deploy/running-tracker-api -f
+```
+
+Follow first-start Valhalla tile build logs:
+
+```bash
+kubectl -n "$NS" logs deploy/valhalla -f
+kubectl -n "$NS" get pvc valhalla-data
+```
+
+The first Valhalla startup downloads the Czech Republic Geofabrik PBF and builds tiles into `pvc/valhalla-data`. Route suggestions can return provider-unavailable responses until that deployment is available. To force a clean rebuild:
+
+```bash
+kubectl -n "$NS" scale deployment/valhalla --replicas=0
+kubectl -n "$NS" delete pvc valhalla-data
+kubectl apply -k infra/k8s/overlays/local
+kubectl -n "$NS" scale deployment/valhalla --replicas=1
 ```
 
 ## UI Options

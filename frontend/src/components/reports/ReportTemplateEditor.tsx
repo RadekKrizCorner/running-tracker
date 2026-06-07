@@ -1,18 +1,36 @@
-import { BarChart3, FileText, ListChecks } from 'lucide-react';
+import { BarChart3, FileText, ListChecks, Palette } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { ReportValues } from '../../lib/api/types';
 import { useTranslation } from '../../lib/i18n';
 
 type ReportTemplateEditorProps = {
   values: ReportValues;
+  theme: Record<string, unknown>;
   onChange: Dispatch<SetStateAction<ReportValues>>;
+  onThemeChange: (theme: Record<string, unknown>) => void;
   disabled?: boolean;
 };
 
-export function ReportTemplateEditor({ values, onChange, disabled = false }: ReportTemplateEditorProps) {
+const REPORT_VARIANTS = [
+  { value: 'default', label: 'reports.builderStyleDefault' },
+  { value: 'race_bib', label: 'reports.builderStyleRaceBib' },
+  { value: 'track_lines', label: 'reports.builderStyleTrackLines' },
+  { value: 'coach_notes', label: 'reports.builderStyleCoachNotes' },
+  { value: 'medal_glow', label: 'reports.builderStyleMedalGlow' },
+  { value: 'minimal_premium', label: 'reports.builderStyleMinimalPremium' },
+] as const;
+
+export function ReportTemplateEditor({
+  values,
+  theme,
+  onChange,
+  onThemeChange,
+  disabled = false,
+}: ReportTemplateEditorProps) {
   const { t } = useTranslation();
   const stats = values.stats ?? {};
   const volume = values.volume ?? {};
+  const visualVariant = reportVariant(theme.variant);
 
   const updateValue = (key: keyof ReportValues, value: string | number | string[]) => {
     onChange((current) => ({ ...current, [key]: value }));
@@ -28,9 +46,42 @@ export function ReportTemplateEditor({ values, onChange, disabled = false }: Rep
       return { ...current, volume: { ...nextVolume, difference: volumeDifference(planned, actual) } };
     });
   };
+  const updateVariant = (variant: string) => {
+    const nextTheme = { ...theme };
+    if (variant === 'default') {
+      delete nextTheme.variant;
+    } else {
+      nextTheme.variant = variant;
+    }
+    onThemeChange(nextTheme);
+  };
 
   return (
     <div className="report-builder-editor">
+      <div className="report-builder-fieldset">
+        <div className="report-builder-subheader">
+          <Palette size={18} />
+          <h3>{t('reports.builderVisualStyle')}</h3>
+        </div>
+        <div className="report-control-grid">
+          <label className="report-field">
+            <span>{t('reports.builderVisualVariant')}</span>
+            <select
+              aria-label={t('reports.builderVisualVariant')}
+              disabled={disabled}
+              value={visualVariant}
+              onChange={(event) => updateVariant(event.target.value)}
+            >
+              {REPORT_VARIANTS.map((variant) => (
+                <option key={variant.value} value={variant.value}>
+                  {t(variant.label)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </div>
+
       <div className="report-builder-fieldset">
         <div className="report-builder-subheader">
           <FileText size={18} />
@@ -271,4 +322,12 @@ function clampedNumber(value: string, min?: number, max?: number) {
 function volumeDifference(planned: number, actual: number) {
   const difference = Math.round((actual - planned) * 10) / 10;
   return Object.is(difference, -0) ? 0 : difference;
+}
+
+function reportVariant(value: unknown) {
+  const normalized = value === 'playful' ? 'track_lines' : value;
+  if (typeof normalized !== 'string') {
+    return 'default';
+  }
+  return REPORT_VARIANTS.some((variant) => variant.value === normalized) ? normalized : 'default';
 }

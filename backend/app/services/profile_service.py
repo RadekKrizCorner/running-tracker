@@ -59,6 +59,9 @@ def get_or_create_user_preferences(session: Session, user: User) -> UserPreferen
         elevation_provider_url=None,
         avatar_icon=None,
         avatar_image_data_url=None,
+        route_start_lat=None,
+        route_start_lng=None,
+        route_start_label=None,
     )
     session.add(preferences)
     session.commit()
@@ -72,7 +75,14 @@ def update_user_preferences(session: Session, user: User, payload: UserPreferenc
     updates = payload.model_dump(exclude_unset=True)
     if "pace_zones" in updates and updates["pace_zones"] is not None:
         updates["pace_zones"] = [zone.model_dump() if hasattr(zone, "model_dump") else zone for zone in payload.pace_zones or []]
-    nullable_preference_fields = {"elevation_provider_url", "avatar_icon", "avatar_image_data_url"}
+    nullable_preference_fields = {
+        "elevation_provider_url",
+        "avatar_icon",
+        "avatar_image_data_url",
+        "route_start_lat",
+        "route_start_lng",
+        "route_start_label",
+    }
     for key, value in updates.items():
         if value is not None or key in nullable_preference_fields:
             setattr(preferences, key, value)

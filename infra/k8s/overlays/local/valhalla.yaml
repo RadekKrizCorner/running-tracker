@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: valhalla
+  labels:
+    app.kubernetes.io/name: valhalla
+    app.kubernetes.io/component: routing
+    app.kubernetes.io/part-of: running-tracker
+spec:
+  ports:
+    - name: http
+      port: 8002
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: valhalla
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: valhalla-data
+  labels:
+    app.kubernetes.io/name: valhalla
+    app.kubernetes.io/component: routing
+    app.kubernetes.io/part-of: running-tracker
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 12Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: valhalla
+  labels:
+    app.kubernetes.io/name: valhalla
+    app.kubernetes.io/component: routing
+    app.kubernetes.io/part-of: running-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: valhalla
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: valhalla
+        app.kubernetes.io/component: routing
+        app.kubernetes.io/part-of: running-tracker
+    spec:
+      securityContext:
+        fsGroup: 59999
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: valhalla
+          image: ghcr.io/valhalla/valhalla-scripted:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8002
+          env:
+            - name: tile_urls
+              value: https://download.geofabrik.de/europe/czech-republic-latest.osm.pbf
+            - name: server_threads
+              value: "2"
+            - name: serve_tiles
+              value: "True"
+            - name: build_tar
+              value: "True"
+            - name: build_elevation
+              value: "False"
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+            failureThreshold: 120
+          readinessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 750m
+              memory: 2Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: valhalla-data
+              mountPath: /custom_files
+      volumes:
+        - name: valhalla-data
+          persistentVolumeClaim:
+            claimName: valhalla-data

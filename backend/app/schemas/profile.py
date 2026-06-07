@@ -137,6 +137,9 @@ class UserPreferenceRead(BaseModel):
     elevation_provider_url: str | None = None
     avatar_icon: str | None = None
     avatar_image_data_url: str | None = None
+    route_start_lat: float | None = None
+    route_start_lng: float | None = None
+    route_start_label: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -154,6 +157,9 @@ class UserPreferenceUpdate(BaseModel):
     elevation_provider_url: str | None = Field(default=None, max_length=512)
     avatar_icon: str | None = Field(default=None, max_length=64)
     avatar_image_data_url: str | None = Field(default=None, max_length=AVATAR_IMAGE_MAX_LENGTH)
+    route_start_lat: float | None = Field(default=None, ge=-90, le=90)
+    route_start_lng: float | None = Field(default=None, ge=-180, le=180)
+    route_start_label: str | None = Field(default=None, max_length=255)
 
     @field_validator("locale")
     @classmethod
@@ -209,6 +215,15 @@ class UserPreferenceUpdate(BaseModel):
     def validate_avatar_image(cls, value: str | None) -> str | None:
         """Validate uploaded avatar image data."""
         return validate_avatar_image_data_url(value)
+
+    @field_validator("route_start_label")
+    @classmethod
+    def normalize_route_start_label(cls, value: str | None) -> str | None:
+        """Normalize blank route start labels to null."""
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
 
 
 class ElevationRecomputeResponse(BaseModel):

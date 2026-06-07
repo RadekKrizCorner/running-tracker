@@ -48,6 +48,9 @@ export type UserPreference = {
   elevation_provider_url: string | null;
   avatar_icon: string | null;
   avatar_image_data_url: string | null;
+  route_start_lat: number | null;
+  route_start_lng: number | null;
+  route_start_label: string | null;
 };
 
 export type ElevationRecomputeResponse = {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
-import { Check, ChevronLeft, ChevronRight, Plus, Star, X } from 'lucide-react';
+import { Archive, ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, Copy, Plus, Star, Trash2, X } from 'lucide-react';
 import { EmptyState } from '../components/ui/EmptyState';
 import {
   useCalendar,
@@ -12,6 +12,7 @@ import {
   useWorkoutPool,
   useWorkoutTemplates,
 } from '../features/plans/api';
+import { useMe } from '../features/auth/api';
 import { useUpdateUserPreferences, useUserPreferences } from '../features/profile/api';
 import { addDaysToIso, weekdayLabel, weekStartIso } from '../lib/date';
 import { formatDate, formatDistance, formatDuration, getFormatLocale } from '../lib/format';
@@ -223,6 +224,7 @@ function doubleThresholdRows(date: string, startOrder: number, t: TranslateFn): 
 
 export function PlansPage() {
   const { t } = useTranslation();
+  const me = useMe();
   const [weekStart, setWeekStart] = useState(weekStartIso());
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDaysToIso(weekStart, index)), [weekStart]);
   const weekEnd = weekDates[6];
@@ -252,8 +254,14 @@ export function PlansPage() {
   const [templateSearch, setTemplateSearch] = useState('');
   const [favoriteTemplateIds, setFavoriteTemplateIds] = useState<string[]>([]);
   const [recentTemplateIds, setRecentTemplateIds] = useState<string[]>([]);
+  const [selectedSessionLocalId, setSelectedSessionLocalId] = useState<string | null>(null);
+  const [savedPlanFingerprint, setSavedPlanFingerprint] = useState(() => weekPlanFingerprint(planTitle, days));
   const selectedDay = days.find((day) => day.scheduled_date === selectedDate) ?? days[0] ?? emptyDay(selectedDate);
-  const selectedSession = selectedDay.sessions.find((session) => session.workout_type !== 'rest') ?? selectedDay.sessions[0] ?? null;
+  const selectedSession =
+    selectedDay.sessions.find((session) => session.local_id === selectedSessionLocalId) ??
+    selectedDay.sessions.find((session) => session.workout_type !== 'rest') ??
+    selectedDay.sessions[0] ??
+    null;
   const poolItems = Array.isArray(workoutPool.data) ? workoutPool.data : [];
   const easyTemplate = useMemo(() => {
     const items = templates.data ?? [];
@@ -279,6 +287,10 @@ export function PlansPage() {
       .sort((left, right) => templateRank(left, favoriteTemplateIds, recentTemplateIds) - templateRank(right, favoriteTemplateIds, recentTemplateIds));
   }, [favoriteTemplateIds, recentTemplateIds, templateSearch, templates.data]);
   const overview = useMemo(() => overviewFromDays(days), [days]);
+  const currentPlanFingerprint = useMemo(() => weekPlanFingerprint(planTitle, days), [days, planTitle]);
+  const hasUnsavedChanges = currentPlanFingerprint !== savedPlanFingerprint;
+  const isReadOnlyDemo = me.data?.is_demo === true;
+  const mutationDisabledReason = isReadOnlyDemo ? t('plans.demoReadOnlyTooltip') : undefined;
   const previousOverview = useMemo(
     () => overviewFromWorkouts(previousCalendar.data?.planned_workouts ?? []),
     [previousCalendar.data?.planned_workouts],
@@ -286,21 +298,20 @@ export function PlansPage() {
 
   useEffect(() => {
     const workouts = calendar.data?.planned_workouts ?? [];
-    setDays(
-      weekDates.map((date) => ({
-        scheduled_date: date,
-        sessions: workouts
-          .filter((workout) => workout.scheduled_date === date)
-          .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
-          .map((workout, index) => rowFromWorkout(date, workout, index)),
-      })),
-    );
+    const loadedDays = weekDates.map((date) => ({
+      scheduled_date: date,
+      sessions: workouts
+        .filter((workout) => workout.scheduled_date === date)
+        .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
+        .map((workout, index) => rowFromWorkout(date, workout, index)),
+    }));
+    const loadedTitle = calendar.data?.plan?.title ?? defaultPlanTitle(weekStart, t);
+    setDays(loadedDays);
     setSelectedDate(weekDates[0]);
-  }, [calendar.data?.planned_workouts, weekDates]);
-
-  useEffect(() => {
-    setPlanTitle(calendar.data?.plan?.title ?? defaultPlanTitle(weekStart, t));
-  }, [calendar.data?.plan?.title, t, weekStart]);
+    setSelectedSessionLocalId(firstSelectableSessionId(loadedDays[0]));
+    setPlanTitle(loadedTitle);
+    setSavedPlanFingerprint(weekPlanFingerprint(loadedTitle, loadedDays));
+  }, [calendar.data?.plan?.title, calendar.data?.planned_workouts, t, weekDates, weekStart]);
 
   useEffect(() => {
     if (!preferences.data) {
@@ -310,7 +321,22 @@ export function PlansPage() {
     setRecentTemplateIds(preferences.data.recent_template_ids ?? []);
   }, [preferences.data]);
 
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      return undefined;
+    }
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
   function updateSession(date: string, localId: string, updates: Partial<WeekRow>) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     setDays((current) =>
       current.map((day) => {
         if (day.scheduled_date !== date) {
@@ -331,12 +357,18 @@ export function PlansPage() {
   }
 
   function replaceDaySessions(date: string, sessions: WeekRow[]) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     setDays((current) =>
       current.map((day) => (day.scheduled_date === date ? { ...day, sessions: normalizeSessionOrder(sessions.map((session) => ({ ...session, scheduled_date: date }))) } : day)),
     );
   }
 
   function appendDaySessions(date: string, sessions: WeekRow[]) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     setDays((current) =>
       current.map((day) => {
         if (day.scheduled_date !== date) {
@@ -364,11 +396,16 @@ export function PlansPage() {
   }
 
   function selectDay(date: string) {
+    const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
     setSelectedDate(date);
+    setSelectedSessionLocalId(firstSelectableSessionId(day));
     setDayEditorOpen(true);
   }
 
   function applyTemplate(date: string, templateId: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const template = templates.data?.find((item) => item.id === templateId);
     const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
     if (!clearRestIfConfirmed(day)) {
@@ -382,6 +419,9 @@ export function PlansPage() {
   }
 
   function appendTemplateSession(date: string, template: WorkoutTemplate, day: WeekDayPlan) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     appendDaySessions(date, [rowFromTemplate(date, template, nextSortOrder(day.sessions))]);
     setRecentTemplateIds((current) => {
       const next = [template.id, ...current.filter((id) => id !== template.id)].slice(0, 4);
@@ -391,6 +431,9 @@ export function PlansPage() {
   }
 
   function markRestDay(date: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
     if (day.sessions.length === 1 && day.sessions[0].workout_type === 'rest') {
       return;
@@ -402,6 +445,9 @@ export function PlansPage() {
   }
 
   function clearDay(date: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
     if (!confirmDeleteSessions(day)) {
       return;
@@ -410,6 +456,9 @@ export function PlansPage() {
   }
 
   function addEasyRun(date: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
     if (!clearRestIfConfirmed(day)) {
       return;
@@ -422,6 +471,9 @@ export function PlansPage() {
   }
 
   function addDoubleThreshold(date: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
     if (!clearRestIfConfirmed(day)) {
       return;
@@ -429,11 +481,44 @@ export function PlansPage() {
     appendDaySessions(date, doubleThresholdRows(date, nextSortOrder(day.sessions), t));
   }
 
-  function moveSelectedWorkout(offsetDays: number) {
-    if (selectedDay.sessions.length === 0) {
+  function deleteSession(date: string, localId: string) {
+    if (isReadOnlyDemo) {
       return;
     }
-    const targetDate = addDaysToIso(selectedDay.scheduled_date, offsetDays);
+    const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
+    const remainingSessions = normalizeSessionOrder(day.sessions.filter((session) => session.local_id !== localId));
+    replaceDaySessions(date, remainingSessions);
+    setSelectedSessionLocalId(firstSelectableSessionId({ ...day, sessions: remainingSessions }));
+  }
+
+  function duplicateSession(date: string, localId: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
+    const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
+    const session = day.sessions.find((item) => item.local_id === localId);
+    if (!session || !rowHasWorkout(session)) {
+      return;
+    }
+    const copy = {
+      ...session,
+      local_id: makeLocalId(date, nextSortOrder(day.sessions)),
+      sort_order: nextSortOrder(day.sessions),
+    };
+    appendDaySessions(date, [copy]);
+    setSelectedSessionLocalId(copy.local_id);
+  }
+
+  function moveSession(date: string, localId: string, offsetDays: number) {
+    if (isReadOnlyDemo) {
+      return;
+    }
+    const sourceDay = days.find((day) => day.scheduled_date === date) ?? emptyDay(date);
+    const session = sourceDay.sessions.find((item) => item.local_id === localId);
+    if (!session || !rowHasWorkout(session)) {
+      return;
+    }
+    const targetDate = addDaysToIso(date, offsetDays);
     if (!weekDates.includes(targetDate)) {
       return;
     }
@@ -441,26 +526,31 @@ export function PlansPage() {
     if (!clearRestIfConfirmed(targetDay)) {
       return;
     }
+    const movedSession = {
+      ...session,
+      local_id: makeLocalId(targetDate, nextSortOrder(targetDay.sessions)),
+      scheduled_date: targetDate,
+      sort_order: nextSortOrder(targetDay.sessions),
+    };
     setDays((current) =>
       current.map((day) => {
-        if (day.scheduled_date === selectedDay.scheduled_date) {
-          return { ...day, sessions: [] };
+        if (day.scheduled_date === date) {
+          return { ...day, sessions: normalizeSessionOrder(day.sessions.filter((item) => item.local_id !== localId)) };
         }
         if (day.scheduled_date === targetDate) {
-          const movedSessions = selectedDay.sessions.map((session, index) => ({
-            ...session,
-            local_id: makeLocalId(targetDate, nextSortOrder(day.sessions) + index),
-            scheduled_date: targetDate,
-          }));
-          return { ...day, sessions: normalizeSessionOrder([...day.sessions.filter((session) => session.workout_type !== 'rest'), ...movedSessions]) };
+          return { ...day, sessions: normalizeSessionOrder([...day.sessions.filter((item) => item.workout_type !== 'rest'), movedSession]) };
         }
         return day;
       }),
     );
     setSelectedDate(targetDate);
+    setSelectedSessionLocalId(movedSession.local_id);
   }
 
   function copyPreviousWeek() {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const workouts = previousCalendar.data?.planned_workouts ?? [];
     setDays(
       weekDates.map((date, index) => {
@@ -484,15 +574,16 @@ export function PlansPage() {
       {
         onSuccess: (response) => {
           if (response.planned_workouts.length > 0) {
-            setDays(
-              weekDates.map((date) => ({
+            const copiedDays = weekDates.map((date) => ({
                 scheduled_date: date,
                 sessions: response.planned_workouts
                   .filter((workout) => workout.scheduled_date === date)
                   .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
                   .map((workout, index) => rowFromWorkout(date, workout, index)),
-              })),
-            );
+              }));
+            setDays(copiedDays);
+            setSelectedSessionLocalId(firstSelectableSessionId(copiedDays[0]));
+            setSavedPlanFingerprint(weekPlanFingerprint(planTitle.trim(), copiedDays));
           }
         },
       },
@@ -500,6 +591,9 @@ export function PlansPage() {
   }
 
   function copyThisWeekToNextWeek() {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const nextWeekStart = weekStartIso(addDaysToIso(weekStart, 7));
     copyWeek.mutate({
       source_week_start_date: weekStart,
@@ -509,6 +603,9 @@ export function PlansPage() {
   }
 
   function toggleFavoriteTemplate(templateId: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     setFavoriteTemplateIds((current) => {
       const next = current.includes(templateId) ? current.filter((id) => id !== templateId) : [...current, templateId];
       updatePreferences.mutate({ favorite_template_ids: next });
@@ -517,29 +614,24 @@ export function PlansPage() {
   }
 
   function saveSchedule() {
-    const workouts = days
-      .flatMap((day) => normalizeSessionOrder(day.sessions))
-      .filter(rowHasWorkout)
-      .map((row) => ({
-        scheduled_date: row.scheduled_date,
-        session_label: row.session_label.trim() || null,
-        sort_order: row.sort_order,
-        ...(row.template_id
-          ? { template_id: row.template_id }
-          : {
-              title: row.title.trim(),
-              workout_type: row.workout_type,
-              target_duration_s: numberOrNull(row.target_duration_min, 60),
-              target_distance_m: numberOrNull(row.target_distance_km, 1000),
-              target_intensity: row.target_intensity || null,
-              instructions: row.instructions.trim() || null,
-            }),
-        status: 'planned',
-      }));
-    saveWeek.mutate({ week_start_date: weekStart, plan_title: planTitle.trim(), workouts });
+    if (isReadOnlyDemo || !hasUnsavedChanges) {
+      return;
+    }
+    const fingerprint = currentPlanFingerprint;
+    saveWeek.mutate(
+      { week_start_date: weekStart, plan_title: planTitle.trim(), workouts: plannedWorkoutPayloads(days) },
+      {
+        onSuccess: () => {
+          setSavedPlanFingerprint(fingerprint);
+        },
+      },
+    );
   }
 
   function createReusableTemplate() {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const title = templateForm.title.trim() || templateForm.name.trim();
     createTemplate.mutate(
       {
@@ -560,22 +652,29 @@ export function PlansPage() {
     );
   }
 
-  function addSelectedToPool() {
-    if (!selectedSession || !rowHasWorkout(selectedSession) || selectedSession.workout_type === 'rest') {
+  function addSessionToPool(session: WeekRow | null) {
+    if (isReadOnlyDemo || !session || !rowHasWorkout(session) || session.workout_type === 'rest') {
       return;
     }
     createPoolItem.mutate({
-      source_template_id: selectedSession.template_id || null,
-      title: selectedSession.title.trim(),
-      workout_type: selectedSession.workout_type,
-      target_duration_s: numberOrNull(selectedSession.target_duration_min, 60),
-      target_distance_m: numberOrNull(selectedSession.target_distance_km, 1000),
-      target_intensity: selectedSession.target_intensity || null,
-      instructions: selectedSession.instructions.trim() || null,
+      source_template_id: session.template_id || null,
+      title: session.title.trim(),
+      workout_type: session.workout_type,
+      target_duration_s: numberOrNull(session.target_duration_min, 60),
+      target_distance_m: numberOrNull(session.target_distance_km, 1000),
+      target_intensity: session.target_intensity || null,
+      instructions: session.instructions.trim() || null,
     });
   }
 
+  function addSelectedToPool() {
+    addSessionToPool(selectedSession);
+  }
+
   function schedulePoolWorkout(item: WorkoutPoolItem) {
+    if (isReadOnlyDemo) {
+      return;
+    }
     const day = days.find((current) => current.scheduled_date === selectedDate) ?? emptyDay(selectedDate);
     if (!clearRestIfConfirmed(day)) {
       return;
@@ -586,6 +685,10 @@ export function PlansPage() {
   }
 
   function handleTemplateDragStart(event: DragEvent<HTMLElement>, templateId: string) {
+    if (isReadOnlyDemo) {
+      event.preventDefault();
+      return;
+    }
     event.dataTransfer.effectAllowed = 'copy';
     event.dataTransfer.setData('application/x-workout-template', templateId);
     event.dataTransfer.setData('text/plain', templateId);
@@ -593,6 +696,10 @@ export function PlansPage() {
 
   function handleTemplateDrop(event: DragEvent<HTMLElement>, date: string) {
     event.preventDefault();
+    if (isReadOnlyDemo) {
+      event.dataTransfer.dropEffect = 'none';
+      return;
+    }
     const templateId = event.dataTransfer.getData('application/x-workout-template') || event.dataTransfer.getData('text/plain');
     if (!templateId) {
       return;
@@ -603,7 +710,7 @@ export function PlansPage() {
 
   function allowTemplateDrop(event: DragEvent<HTMLElement>) {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
+    event.dataTransfer.dropEffect = isReadOnlyDemo ? 'none' : 'copy';
   }
 
   return (
@@ -618,23 +725,37 @@ export function PlansPage() {
             <ChevronLeft size={16} />
             {t('common.previous')}
           </button>
-          <input aria-label={t('plans.planTitle')} value={planTitle} onChange={(event) => setPlanTitle(event.target.value)} />
+          <input
+            aria-label={t('plans.planTitle')}
+            value={planTitle}
+            disabled={isReadOnlyDemo}
+            title={mutationDisabledReason}
+            onChange={(event) => setPlanTitle(event.target.value)}
+          />
           <input type="date" value={weekStart} onChange={(event) => setWeekStart(weekStartIso(event.target.value))} />
           <button className="secondary-button" type="button" onClick={() => setWeekStart(weekStartIso(addDaysToIso(weekStart, 7)))}>
             {t('common.next')}
             <ChevronRight size={16} />
           </button>
-          <button className="secondary-button" type="button" onClick={copyPreviousWeek} disabled={previousCalendar.isLoading}>
+          <button className="secondary-button" type="button" onClick={copyPreviousWeek} disabled={isReadOnlyDemo || previousCalendar.isLoading} title={mutationDisabledReason}>
             {copyWeek.isPending ? t('plans.copying') : t('plans.copyPreviousWeek')}
           </button>
-          <button className="secondary-button" type="button" onClick={copyThisWeekToNextWeek} disabled={copyWeek.isPending}>
+          <button className="secondary-button" type="button" onClick={copyThisWeekToNextWeek} disabled={isReadOnlyDemo || copyWeek.isPending} title={mutationDisabledReason}>
             {t('plans.copyToNextWeek')}
           </button>
-          <button className="primary-button" type="button" onClick={saveSchedule} disabled={saveWeek.isPending}>
+          <button className="primary-button" type="button" onClick={saveSchedule} disabled={isReadOnlyDemo || !hasUnsavedChanges || saveWeek.isPending} title={mutationDisabledReason}>
             {saveWeek.isPending ? t('common.saving') : t('plans.saveWeek')}
           </button>
+          {hasUnsavedChanges ? <span className="unsaved-badge">{t('plans.unsavedChanges')}</span> : null}
         </div>
       </header>
+
+      {isReadOnlyDemo ? (
+        <section className="read-only-demo-banner" role="status">
+          <strong>{t('plans.demoReadOnlyTitle')}</strong>
+          <span>{t('plans.demoReadOnlyDetail')}</span>
+        </section>
+      ) : null}
 
       <section className="metric-grid planning-metrics sticky-metrics">
         <PlanningMetricCard
@@ -671,12 +792,12 @@ export function PlansPage() {
               day={day}
               selected={day.scheduled_date === selectedDate}
               onSelect={() => selectDay(day.scheduled_date)}
-              onRest={() => markRestDay(day.scheduled_date)}
-              onClear={() => clearDay(day.scheduled_date)}
               onAddEasy={() => addEasyRun(day.scheduled_date)}
               onAddDoubleThreshold={() => addDoubleThreshold(day.scheduled_date)}
               onDragOver={allowTemplateDrop}
               onTemplateDrop={(event) => handleTemplateDrop(event, day.scheduled_date)}
+              readOnly={isReadOnlyDemo}
+              disabledReason={mutationDisabledReason}
             />
           ))}
         </section>
@@ -687,7 +808,7 @@ export function PlansPage() {
               <p className="eyebrow">{t('plans.dragOrClick')}</p>
               <h2>{t('plans.templateLibrary')}</h2>
             </div>
-            <button className="secondary-button compact" type="button" onClick={() => setTemplateDialogOpen(true)}>
+            <button className="secondary-button compact" type="button" onClick={() => setTemplateDialogOpen(true)} disabled={isReadOnlyDemo} title={mutationDisabledReason}>
               <Plus size={16} />
               {t('common.add')}
             </button>
@@ -705,8 +826,10 @@ export function PlansPage() {
                 <button
                   className="template-chip"
                   type="button"
-                  draggable
+                  draggable={!isReadOnlyDemo}
                   aria-label={t('plans.useTemplate', { name: template.name })}
+                  disabled={isReadOnlyDemo}
+                  title={mutationDisabledReason}
                   onClick={() => applyTemplate(selectedDate, template.id)}
                   onDragStart={(event) => handleTemplateDragStart(event, template.id)}
                 >
@@ -719,6 +842,8 @@ export function PlansPage() {
                   className={favoriteTemplateIds.includes(template.id) ? 'icon-button active' : 'icon-button'}
                   type="button"
                   aria-label={t(favoriteTemplateIds.includes(template.id) ? 'plans.unfavorite' : 'plans.favorite', { name: template.name })}
+                  disabled={isReadOnlyDemo}
+                  title={mutationDisabledReason ?? t(favoriteTemplateIds.includes(template.id) ? 'plans.unfavorite' : 'plans.favorite', { name: template.name })}
                   onClick={() => toggleFavoriteTemplate(template.id)}
                 >
                   <Star size={16} fill={favoriteTemplateIds.includes(template.id) ? 'currentColor' : 'none'} />
@@ -735,7 +860,13 @@ export function PlansPage() {
               <p className="eyebrow">{t('plans.unscheduled')}</p>
               <h2>{t('plans.workoutPool')}</h2>
             </div>
-            <button className="secondary-button compact" type="button" onClick={addSelectedToPool} disabled={!selectedSession || !rowHasWorkout(selectedSession) || selectedSession.workout_type === 'rest'}>
+            <button
+              className="secondary-button compact"
+              type="button"
+              onClick={addSelectedToPool}
+              disabled={isReadOnlyDemo || !selectedSession || !rowHasWorkout(selectedSession) || selectedSession.workout_type === 'rest'}
+              title={mutationDisabledReason}
+            >
               {t('plans.addToPool')}
             </button>
           </div>
@@ -747,7 +878,8 @@ export function PlansPage() {
                 key={item.id}
                 aria-label={t('plans.scheduleOnSelected', { name: item.title })}
                 onClick={() => schedulePoolWorkout(item)}
-                disabled={schedulePoolItem.isPending}
+                disabled={isReadOnlyDemo || schedulePoolItem.isPending}
+                title={mutationDisabledReason}
               >
                 <strong>{item.title}</strong>
                 <span>{enumLabel(t, 'workout', item.workout_type)} · {enumLabel(t, 'intensity', item.target_intensity ?? 'free')} · {formatDistance(item.target_distance_m)}</span>
@@ -767,14 +899,20 @@ export function PlansPage() {
           day={selectedDay}
           weekDates={weekDates}
           weekEnd={weekEnd}
+          selectedSessionId={selectedSession?.local_id ?? null}
           onClose={() => setDayEditorOpen(false)}
           onUpdate={updateSession}
-          onMove={moveSelectedWorkout}
-          onAddPool={addSelectedToPool}
+          onSelectSession={setSelectedSessionLocalId}
+          onDeleteSession={deleteSession}
+          onDuplicateSession={duplicateSession}
+          onMoveSession={moveSession}
+          onAddSessionPool={(session) => addSessionToPool(session)}
           onRest={markRestDay}
           onClear={clearDay}
           onAddEasy={addEasyRun}
           onAddDoubleThreshold={addDoubleThreshold}
+          readOnly={isReadOnlyDemo}
+          disabledReason={mutationDisabledReason}
         />
       ) : null}
 
@@ -817,22 +955,22 @@ function WeekDayCard({
   day,
   selected,
   onSelect,
-  onRest,
-  onClear,
   onAddEasy,
   onAddDoubleThreshold,
   onDragOver,
   onTemplateDrop,
+  readOnly,
+  disabledReason,
 }: {
   day: WeekDayPlan;
   selected: boolean;
   onSelect: () => void;
-  onRest: () => void;
-  onClear: () => void;
   onAddEasy: () => void;
   onAddDoubleThreshold: () => void;
   onDragOver: (event: DragEvent<HTMLElement>) => void;
   onTemplateDrop: (event: DragEvent<HTMLElement>) => void;
+  readOnly: boolean;
+  disabledReason?: string;
 }) {
   const { t } = useTranslation();
   const state = dayState(day);
@@ -852,7 +990,7 @@ function WeekDayCard({
             ? t('plans.unscheduledDay')
             : state === 'rest'
               ? t('plans.restDay')
-              : t('plans.sessionCount', { count: visibleSessions.length })}
+              : sessionCountLabel(visibleSessions.length, t)}
         </strong>
       </button>
       <span className={`badge ${state === 'planned' && firstSession ? firstSession.target_intensity : ''}`}>{t(`plans.state.${state}`)}</span>
@@ -872,12 +1010,12 @@ function WeekDayCard({
           <small>{t('plans.noDistance')} · {t('plans.noTime')}</small>
         )}
       </div>
-      <div className="day-quick-actions">
-        <button type="button" onClick={onRest}>{t('plans.markRest')}</button>
-        <button type="button" onClick={onClear}>{t('plans.clearDay')}</button>
-        <button type="button" onClick={onAddEasy}>{t('plans.addEasyRun')}</button>
-        <button type="button" onClick={onAddDoubleThreshold}>{t('plans.addDoubleThreshold')}</button>
-      </div>
+      {selected ? (
+        <div className="day-quick-actions">
+          <button type="button" onClick={onAddEasy} disabled={readOnly} title={disabledReason}>{t('plans.addEasyRun')}</button>
+          <button type="button" onClick={onAddDoubleThreshold} disabled={readOnly} title={disabledReason}>{t('plans.addDoubleThreshold')}</button>
+        </div>
+      ) : null}
       {selected ? <Check className="selected-check" size={17} /> : null}
     </article>
   );
@@ -887,31 +1025,41 @@ function DayEditorModal({
   day,
   weekDates,
   weekEnd,
+  selectedSessionId,
   onClose,
   onUpdate,
-  onMove,
-  onAddPool,
+  onSelectSession,
+  onDeleteSession,
+  onDuplicateSession,
+  onMoveSession,
+  onAddSessionPool,
   onRest,
   onClear,
   onAddEasy,
   onAddDoubleThreshold,
+  readOnly,
+  disabledReason,
 }: {
   day: WeekDayPlan;
   weekDates: string[];
   weekEnd: string;
+  selectedSessionId: string | null;
   onClose: () => void;
   onUpdate: (date: string, localId: string, updates: Partial<WeekRow>) => void;
-  onMove: (days: number) => void;
-  onAddPool: () => void;
+  onSelectSession: (localId: string) => void;
+  onDeleteSession: (date: string, localId: string) => void;
+  onDuplicateSession: (date: string, localId: string) => void;
+  onMoveSession: (date: string, localId: string, days: number) => void;
+  onAddSessionPool: (session: WeekRow) => void;
   onRest: (date: string) => void;
   onClear: (date: string) => void;
   onAddEasy: (date: string) => void;
   onAddDoubleThreshold: (date: string) => void;
+  readOnly: boolean;
+  disabledReason?: string;
 }) {
   const { t } = useTranslation();
   const editableSessions = day.sessions.length > 0 ? day.sessions : [emptySession(day.scheduled_date)];
-  const hasWorkouts = day.sessions.some(rowHasWorkout);
-  const hasPoolCandidate = day.sessions.some((session) => rowHasWorkout(session) && session.workout_type !== 'rest');
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <section
@@ -931,51 +1079,131 @@ function DayEditorModal({
           </button>
         </div>
         <div className="day-editor-actions">
-          <button className="secondary-button" type="button" onClick={() => onMove(-1)} disabled={!hasWorkouts || day.scheduled_date === weekDates[0]}>
-            {t('plans.moveLeft')}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => onMove(1)} disabled={!hasWorkouts || day.scheduled_date === weekEnd}>
-            {t('plans.moveRight')}
-          </button>
-          <button className="secondary-button" type="button" onClick={onAddPool} disabled={!hasPoolCandidate}>
-            {t('plans.addToPool')}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => onRest(day.scheduled_date)}>
-            {t('plans.markRest')}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => onClear(day.scheduled_date)}>
-            {t('plans.clearDay')}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => onAddEasy(day.scheduled_date)}>
-            {t('plans.addEasyRun')}
-          </button>
-          <button className="secondary-button" type="button" onClick={() => onAddDoubleThreshold(day.scheduled_date)}>
-            {t('plans.addDoubleThreshold')}
-          </button>
+          <div className="day-editor-primary-actions">
+            <button className="secondary-button" type="button" onClick={() => onAddEasy(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+              {t('plans.addEasyRun')}
+            </button>
+            <button className="secondary-button" type="button" onClick={() => onAddDoubleThreshold(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+              {t('plans.addDoubleThreshold')}
+            </button>
+          </div>
+          <div className="day-editor-danger-actions">
+            <button className="secondary-button danger-lite" type="button" onClick={() => onRest(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+              {t('plans.markWholeDayRest')}
+            </button>
+            <button className="secondary-button danger-lite" type="button" onClick={() => onClear(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+              {t('plans.clearWholeDay')}
+            </button>
+          </div>
         </div>
         <div className="day-editor-session-list">
-          {editableSessions.map((session, index) => (
-            <section className="day-editor-session" key={session.local_id}>
+          {editableSessions.map((session, index) => {
+            const sessionNumber = index + 1;
+            const isWorkout = rowHasWorkout(session);
+            const isSelected = selectedSessionId === session.local_id || (!selectedSessionId && index === 0);
+            return (
+            <section
+              className={`day-editor-session ${isSelected ? 'selected' : ''}`}
+              key={session.local_id}
+              onClick={() => onSelectSession(session.local_id)}
+              onFocusCapture={() => onSelectSession(session.local_id)}
+            >
               <div className="session-heading">
-                <strong>{t('plans.sessionNumber', { count: index + 1 })}</strong>
-                {session.session_label ? <span>{session.session_label}</span> : null}
+                <div>
+                  <strong>{t('plans.sessionNumber', { count: sessionNumber })}</strong>
+                  {session.session_label ? <span>{session.session_label}</span> : null}
+                  {isSelected ? <small>{t('plans.selectedSession')}</small> : null}
+                </div>
+                <div className="session-actions">
+                  <button
+                    className="icon-button compact"
+                    type="button"
+                    aria-label={t('plans.moveSessionLeft', { count: sessionNumber })}
+                    title={readOnly ? disabledReason : t('plans.moveSessionLeft', { count: sessionNumber })}
+                    disabled={readOnly || !isWorkout || day.scheduled_date === weekDates[0]}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMoveSession(day.scheduled_date, session.local_id, -1);
+                    }}
+                  >
+                    <ArrowLeft size={15} />
+                  </button>
+                  <button
+                    className="icon-button compact"
+                    type="button"
+                    aria-label={t('plans.moveSessionRight', { count: sessionNumber })}
+                    title={readOnly ? disabledReason : t('plans.moveSessionRight', { count: sessionNumber })}
+                    disabled={readOnly || !isWorkout || day.scheduled_date === weekEnd}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMoveSession(day.scheduled_date, session.local_id, 1);
+                    }}
+                  >
+                    <ArrowRight size={15} />
+                  </button>
+                  <button
+                    className="icon-button compact"
+                    type="button"
+                    aria-label={t('plans.duplicateSession', { count: sessionNumber })}
+                    title={readOnly ? disabledReason : t('plans.duplicateSession', { count: sessionNumber })}
+                    disabled={readOnly || !isWorkout}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDuplicateSession(day.scheduled_date, session.local_id);
+                    }}
+                  >
+                    <Copy size={15} />
+                  </button>
+                  <button
+                    className="icon-button compact"
+                    type="button"
+                    aria-label={t('plans.addSessionToPool', { count: sessionNumber })}
+                    title={readOnly ? disabledReason : t('plans.addSessionToPool', { count: sessionNumber })}
+                    disabled={readOnly || !isWorkout || session.workout_type === 'rest'}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onAddSessionPool(session);
+                    }}
+                  >
+                    <Archive size={15} />
+                  </button>
+                  <button
+                    className="icon-button compact danger"
+                    type="button"
+                    aria-label={t('plans.deleteSession', { count: sessionNumber })}
+                    title={readOnly ? disabledReason : t('plans.deleteSession', { count: sessionNumber })}
+                    disabled={readOnly}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDeleteSession(day.scheduled_date, session.local_id);
+                    }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
               </div>
               <div className="week-row-fields vertical">
                 <input
-                  aria-label={`${t('plans.sessionLabel')} ${day.scheduled_date} ${index + 1}`}
+                  aria-label={`${t('plans.sessionLabel')} ${day.scheduled_date} ${sessionNumber}`}
                   placeholder={t('plans.sessionLabel')}
                   value={session.session_label}
+                  disabled={readOnly}
+                  title={disabledReason}
                   onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', session_label: event.target.value })}
                 />
                 <input
-                  aria-label={`${t('plans.titleField')} ${day.scheduled_date} ${index + 1}`}
+                  aria-label={`${t('plans.titleField')} ${day.scheduled_date} ${sessionNumber}`}
                   placeholder={t('plans.titleField')}
                   value={session.title}
+                  disabled={readOnly}
+                  title={disabledReason}
                   onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', title: event.target.value })}
                 />
                 <select
-                  aria-label={`${t('plans.workoutType')} ${day.scheduled_date} ${index + 1}`}
+                  aria-label={`${t('plans.workoutType')} ${day.scheduled_date} ${sessionNumber}`}
                   value={session.workout_type}
+                  disabled={readOnly}
+                  title={disabledReason}
                   onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', workout_type: event.target.value })}
                 >
                   <WorkoutTypeOptions />
@@ -987,44 +1215,53 @@ function DayEditorModal({
                   </div>
                   <div className="field-pair metric-field-pair">
                     <MetricInputField
-                      ariaLabel={`${t('plans.targetDistance')} ${t('plans.kilometersShort')} ${day.scheduled_date} ${index + 1}`}
+                      ariaLabel={`${t('plans.targetDistance')} ${t('plans.kilometersShort')} ${day.scheduled_date} ${sessionNumber}`}
                       helper={t('plans.targetDistanceHelp')}
                       inputMode="decimal"
                       label={t('plans.targetDistance')}
                       placeholder={t('plans.distancePlaceholder')}
                       unit={t('plans.kilometersShort')}
                       value={session.target_distance_km}
+                      disabled={readOnly}
+                      title={disabledReason}
                       onChange={(value) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_distance_km: value })}
                     />
                     <MetricInputField
-                      ariaLabel={`${t('plans.targetDuration')} ${t('plans.minutesShort')} ${day.scheduled_date} ${index + 1}`}
+                      ariaLabel={`${t('plans.targetDuration')} ${t('plans.minutesShort')} ${day.scheduled_date} ${sessionNumber}`}
                       helper={t('plans.targetDurationHelp')}
                       inputMode="numeric"
                       label={t('plans.targetDuration')}
                       placeholder={t('plans.durationPlaceholder')}
                       unit={t('plans.minutesShort')}
                       value={session.target_duration_min}
+                      disabled={readOnly}
+                      title={disabledReason}
                       onChange={(value) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_duration_min: value })}
                     />
                   </div>
                 </div>
                 <select
-                  aria-label={`${t('common.intensity')} ${day.scheduled_date} ${index + 1}`}
+                  aria-label={`${t('common.intensity')} ${day.scheduled_date} ${sessionNumber}`}
                   value={session.target_intensity}
+                  disabled={readOnly}
+                  title={disabledReason}
                   onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_intensity: event.target.value })}
                 >
                   <IntensityOptions />
                 </select>
               </div>
               <textarea
-                aria-label={`${t('plans.instructions')} ${day.scheduled_date} ${index + 1}`}
+                aria-label={`${t('plans.instructions')} ${day.scheduled_date} ${sessionNumber}`}
                 rows={4}
                 placeholder={t('plans.instructions')}
                 value={session.instructions}
+                disabled={readOnly}
+                title={disabledReason}
                 onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', instructions: event.target.value })}
               />
             </section>
-          ))}
+          );
+          })}
         </div>
       </section>
     </div>
@@ -1033,19 +1270,23 @@ function DayEditorModal({
 
 function MetricInputField({
   ariaLabel,
+  disabled,
   helper,
   inputMode,
   label,
   placeholder,
+  title,
   unit,
   value,
   onChange,
 }: {
   ariaLabel: string;
+  disabled?: boolean;
   helper: string;
   inputMode: 'decimal' | 'numeric';
   label: string;
   placeholder: string;
+  title?: string;
   unit: string;
   value: string;
   onChange: (value: string) => void;
@@ -1062,6 +1303,8 @@ function MetricInputField({
           inputMode={inputMode}
           placeholder={placeholder}
           value={value}
+          disabled={disabled}
+          title={title}
           onChange={(event) => onChange(event.target.value)}
         />
         <span className="metric-input-unit" aria-hidden="true">{unit}</span>
@@ -1181,6 +1424,53 @@ function overviewFromDays(days: WeekDayPlan[]): PlanningOverview {
 
 function overviewFromWorkouts(workouts: PlannedWorkout[]): PlanningOverview {
   return overviewFromRows(workouts.map((workout, index) => rowFromWorkout(workout.scheduled_date, workout, index)));
+}
+
+function plannedWorkoutPayloads(days: WeekDayPlan[]) {
+  return days
+    .flatMap((day) => normalizeSessionOrder(day.sessions))
+    .filter(rowHasWorkout)
+    .map((row) => ({
+      scheduled_date: row.scheduled_date,
+      session_label: row.session_label.trim() || null,
+      sort_order: row.sort_order,
+      ...(row.template_id
+        ? { template_id: row.template_id }
+        : {
+            title: row.title.trim(),
+            workout_type: row.workout_type,
+            target_duration_s: numberOrNull(row.target_duration_min, 60),
+            target_distance_m: numberOrNull(row.target_distance_km, 1000),
+            target_intensity: row.target_intensity || null,
+            instructions: row.instructions.trim() || null,
+          }),
+      status: 'planned',
+    }));
+}
+
+function weekPlanFingerprint(planTitle: string, days: WeekDayPlan[]) {
+  return JSON.stringify({
+    plan_title: planTitle.trim(),
+    workouts: plannedWorkoutPayloads(days),
+  });
+}
+
+function firstSelectableSessionId(day: WeekDayPlan | undefined) {
+  return day?.sessions.find(rowHasWorkout)?.local_id ?? day?.sessions[0]?.local_id ?? null;
+}
+
+function sessionCountLabel(count: number, t: TranslateFn) {
+  const locale = getFormatLocale();
+  if (locale.startsWith('cs')) {
+    if (count === 1) {
+      return t('plans.sessionCountOne', { count });
+    }
+    if (count >= 2 && count <= 4) {
+      return t('plans.sessionCountFew', { count });
+    }
+    return t('plans.sessionCount', { count });
+  }
+  return count === 1 ? t('plans.sessionCountOne', { count }) : t('plans.sessionCount', { count });
 }
 
 function comparisonLabel(current: number, previous: number, t: TranslateFn) {

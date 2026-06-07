@@ -1,9 +1,10 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { RouteCandidate } from '../../lib/api/types';
 import { useTranslation } from '../../lib/i18n';
 import { EmptyState } from '../ui/EmptyState';
+import { osmStyle } from './mapStyle';
 
 type RouteCandidateMapProps = {
   candidate: RouteCandidate | null;
@@ -111,25 +112,4 @@ function isLatLng(value: unknown): value is [number, number] {
 
 function browserSupportsMapLibre() {
   return typeof window !== 'undefined' && typeof window.URL?.createObjectURL === 'function';
-}
-
-function osmStyle(): StyleSpecification {
-  return {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '© OpenStreetMap contributors',
-      },
-    },
-    layers: [
-      {
-        id: 'osm',
-        type: 'raster',
-        source: 'osm',
-      },
-    ],
-  };
 }

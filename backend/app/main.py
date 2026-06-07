@@ -9,7 +9,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
-from app.core.config import get_settings
+from app.core.config import get_settings, validate_runtime_settings
 from app.core.exceptions import AppException, app_exception_handler, validation_exception_handler
 from app.core.logging import configure_logging
 from app.db.init_db import create_database, ensure_owner
@@ -20,6 +20,7 @@ def create_app() -> FastAPI:
     """Create the FastAPI application."""
     configure_logging()
     settings = get_settings()
+    validate_runtime_settings(settings)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

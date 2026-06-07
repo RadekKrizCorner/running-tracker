@@ -18,10 +18,10 @@ Demo sessions are read-only. The backend blocks demo writes, data export, accoun
 
 Export includes profile, provider connection metadata without tokens, activities, notes, gear, planned workouts, weekly metrics CSV, and activity CSV.
 
-Report templates and saved report drafts are owner-local. Weekly report prefill reads owner-scoped plans, planned workouts, and completed running activities, then returns editable values to the frontend. SVG/PNG rendering accepts those values only and does not include provider tokens or store rendered binary files.
+Report templates and saved report drafts are owner-local. Weekly report prefill reads owner-scoped plans, planned workouts, and completed running activities, then returns editable values to the frontend. SVG/PNG rendering accepts bounded submitted values only and does not include provider tokens or store rendered binary files.
 
 Account deletion removes local app data only. It does not delete activities from Strava.
 
-Route Explorer sends the owner-entered start point and route preferences to the Running Tracker backend. When optional routing is enabled, the backend forwards that request to the configured local Valhalla service. Generated route suggestions are returned to the browser for preview and are not stored by V1.
+Route Explorer stores the optional default start coordinate and label in owner-local preferences. It sends the selected start point and route preferences to the Running Tracker backend. Address lookup is disabled unless a geocoding provider is explicitly configured, so typed addresses are not forwarded by the V1 UI. With `ROUTING_PROVIDER=local_demo`, route suggestions are generated inside the backend and are not forwarded to another routing service. With `ROUTING_PROVIDER=valhalla`, the backend forwards the request to the configured local Valhalla service. Generated route suggestions are returned to the browser for preview and are not stored by V1.
 
-Route maps render in the browser. Depending on the configured map style, the browser may request public OpenStreetMap raster tiles or another configured public tile host for the visible map area. Those tile requests are separate from the private backend route suggestion request and can reveal the viewed map area to the tile provider.
+Route maps render in the browser. Depending on `VITE_MAP_TILE_URL`, the browser may request public OpenStreetMap raster tiles or another configured public tile host for the visible map area. Those tile requests are separate from the private backend route suggestion request and can reveal the viewed map area to the tile provider.

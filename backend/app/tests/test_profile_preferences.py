@@ -13,6 +13,9 @@ def test_owner_preferences_can_be_read_and_updated(client) -> None:
     assert initial.json()["locale"] == "cs-CZ"
     assert initial.json()["dashboard_mode"] == "advanced"
     assert initial.json()["favorite_template_ids"] == []
+    assert initial.json()["route_start_lat"] is None
+    assert initial.json()["route_start_lng"] is None
+    assert initial.json()["route_start_label"] is None
 
     response = client.patch(
         "/api/v1/profile/preferences",
@@ -20,6 +23,9 @@ def test_owner_preferences_can_be_read_and_updated(client) -> None:
             "dashboard_mode": "simple",
             "favorite_template_ids": ["template-a"],
             "recent_template_ids": ["template-b", "template-a"],
+            "route_start_lat": 49.2893614,
+            "route_start_lng": 16.0977864,
+            "route_start_label": "Tasov",
             "pace_zones": [
                 {"name": "Easy", "min_pace_s_per_km": 360, "max_pace_s_per_km": 420},
                 {"name": "Tempo", "min_pace_s_per_km": 300, "max_pace_s_per_km": 359},
@@ -32,11 +38,16 @@ def test_owner_preferences_can_be_read_and_updated(client) -> None:
     assert body["dashboard_mode"] == "simple"
     assert body["favorite_template_ids"] == ["template-a"]
     assert body["recent_template_ids"] == ["template-b", "template-a"]
+    assert body["route_start_lat"] == 49.2893614
+    assert body["route_start_lng"] == 16.0977864
+    assert body["route_start_label"] == "Tasov"
     assert body["pace_zones"][0]["name"] == "Easy"
 
     persisted = client.get("/api/v1/profile/preferences")
     assert persisted.status_code == 200
     assert persisted.json()["dashboard_mode"] == "simple"
+    assert persisted.json()["route_start_lat"] == 49.2893614
+    assert persisted.json()["route_start_lng"] == 16.0977864
 
 
 def test_owner_preferences_persist_avatar_choice(client) -> None:

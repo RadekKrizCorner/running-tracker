@@ -93,3 +93,16 @@ def test_change_password_requires_current_password(client: TestClient) -> None:
     )
     assert new_login.status_code == 200
 
+
+def test_validation_errors_do_not_echo_rejected_inputs(client: TestClient) -> None:
+    """Verify validation errors do not return submitted input values."""
+    response = client.post(
+        "/api/v1/auth/login",
+        json={"email": "not-an-email", "password": ""},
+    )
+
+    assert response.status_code == 422
+    payload = response.json()
+    assert payload["code"] == "VALIDATION_ERROR"
+    assert "not-an-email" not in str(payload)
+    assert all("input" not in error for error in payload["errors"])

@@ -12,6 +12,7 @@ This guide moves the local Running Tracker stack from Docker Compose into a loca
 | `worker` | `running-tracker-worker` `Deployment` | Runs `python -m app.jobs.worker`. |
 | `scheduler` | `running-tracker-scheduler` `Deployment` | Queues periodic Strava syncs. |
 | `frontend` | `running-tracker-frontend` `Deployment` + `Service` | Serves the production Vite build through Nginx. |
+| Valhalla | `valhalla` `Deployment` + `Service` + PVC | Builds and serves Czech Republic routing tiles from OpenStreetMap data. |
 | `alembic upgrade head` | `running-tracker-migrate` `Job` | Runs database migrations before app pods become ready. |
 
 The manifests live in:
@@ -109,7 +110,7 @@ Edit `infra/k8s/overlays/local/secret.env` and set:
 
 - `OWNER_EMAIL`
 - `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`, if you want to test Strava OAuth
-- `ROUTING_ENABLED`, `ROUTING_PROVIDER`, `VALHALLA_BASE_URL`, `ROUTE_SUGGESTION_MAX_DISTANCE_M`, and `ROUTE_SUGGESTION_*` bounds, if you run a local Valhalla service
+- Routing defaults are non-secret and live in `infra/k8s/overlays/local/config.env`. If your existing ignored `secret.env` contains routing keys, keep `ROUTING_PROVIDER=valhalla` and `VALHALLA_BASE_URL=http://valhalla:8002` there too, or remove those overrides.
 
 For local Kubernetes, the Strava callback URL is:
 
@@ -117,7 +118,9 @@ For local Kubernetes, the Strava callback URL is:
 http://localhost:8009/api/v1/connections/strava/callback
 ```
 
-Optional route suggestions use self-hosted Valhalla. For V1, keep routing data scoped to the Czech Republic to control disk and memory use. The backend also rejects start points outside the configured `ROUTE_SUGGESTION_MIN/MAX_LAT/LNG` bounds, which default to the Czech Republic. Run Valhalla separately, expose it to the API container or cluster network, set `ROUTING_ENABLED=true`, and point `VALHALLA_BASE_URL` at that service. If Valhalla is absent, leave routing disabled; app startup and all non-routing workflows continue normally.
+Route suggestions are enabled in the local overlay with `ROUTING_PROVIDER=valhalla` and `VALHALLA_BASE_URL=http://valhalla:8002`. The local overlay runs Valhalla in the cluster, downloads the Czech Republic Geofabrik PBF, and builds routing tiles into the `valhalla-data` PVC. The backend rejects start points outside the configured `ROUTE_SUGGESTION_MIN/MAX_LAT/LNG` bounds, which default to the Czech Republic.
+
+The first Valhalla startup can take many minutes while it downloads `czech-republic-latest.osm.pbf` and builds tiles. Keep several GiB of free local disk available for the `kind` volume. Later starts reuse the PVC. Use `local_demo` only when explicitly testing or demoing approximate routes that are not snapped to roads or trails.
 
 ## 4. Render And Apply Manifests
 
@@ -150,6 +153,10 @@ Wait for the app:
 
 ```bash
 kubectl -n running-tracker wait \
+  --for=condition=Available deployment/valhalla \
+  --timeout=3600s
+
+kubectl -n running-tracker wait \
   --for=condition=Available deployment/running-tracker-api \
   --timeout=240s
 
@@ -175,18 +182,35 @@ kubectl -n running-tracker get pvc
 
 ## 5. Open The App
 
-Use two terminal windows.
-
-Terminal 1:
+Kubernetes keeps the pods running in the background. The browser still needs local
+ports that forward to the cluster services. Start both detached forwards from the
+repository root:
 
 ```bash
-kubectl -n running-tracker port-forward svc/running-tracker-api 8009:8009
+scripts/k8s-port-forwards.sh start
 ```
 
-Terminal 2:
+Check them later:
 
 ```bash
-kubectl -n running-tracker port-forward svc/running-tracker-frontend 8080:8080
+scripts/k8s-port-forwards.sh status
+```
+
+On macOS, install a LaunchAgent if you want the forwards to start after login and
+retry every minute until the local Kubernetes cluster is available:
+
+```bash
+scripts/k8s-port-forwards.sh install-launchd
+```
+
+The installer copies the helper to `~/Library/Application Support/running-tracker/`
+before loading it, because LaunchAgents may not be allowed to execute files
+directly from `~/Documents`.
+
+Remove that LaunchAgent later with:
+
+```bash
+scripts/k8s-port-forwards.sh uninstall-launchd
 ```
 
 Open:
@@ -232,6 +256,7 @@ kubectl -n running-tracker get pods -w
 Read logs:
 
 ```bash
+kubectl -n running-tracker logs deploy/valhalla
 kubectl -n running-tracker logs deploy/running-tracker-api
 kubectl -n running-tracker logs deploy/running-tracker-worker
 kubectl -n running-tracker logs deploy/running-tracker-scheduler
@@ -248,6 +273,13 @@ Open a shell in the API container:
 
 ```bash
 kubectl -n running-tracker exec -it deploy/running-tracker-api -- sh
+```
+
+Check Valhalla during first tile build:
+
+```bash
+kubectl -n running-tracker logs deploy/valhalla -f
+kubectl -n running-tracker get pvc valhalla-data
 ```
 
 Apply edited `config.env` or `secret.env` values:
@@ -281,6 +313,15 @@ Reset only this app:
 
 ```bash
 kubectl delete namespace running-tracker
+```
+
+Reset only Valhalla routing data:
+
+```bash
+kubectl -n running-tracker scale deployment/valhalla --replicas=0
+kubectl -n running-tracker delete pvc valhalla-data
+kubectl apply -k infra/k8s/overlays/local
+kubectl -n running-tracker scale deployment/valhalla --replicas=1
 ```
 
 Delete the whole local cluster:

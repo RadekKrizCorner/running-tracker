@@ -1,9 +1,10 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
-import type { Map as MapLibreMap, StyleSpecification } from 'maplibre-gl';
+import type { Map as MapLibreMap } from 'maplibre-gl';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { HeatmapBounds, HeatmapPoint } from '../../lib/api/types';
 import { EmptyState } from '../ui/EmptyState';
 import { useTranslation } from '../../lib/i18n';
+import { osmStyle } from './mapStyle';
 
 type RunHeatmapProps = {
   points: HeatmapPoint[];
@@ -161,25 +162,4 @@ function mapCenter(points: HeatmapPoint[], bounds: HeatmapBounds | null): [numbe
 
 function browserSupportsMapLibre() {
   return typeof window !== 'undefined' && typeof window.URL?.createObjectURL === 'function';
-}
-
-function osmStyle(): StyleSpecification {
-  return {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '© OpenStreetMap contributors',
-      },
-    },
-    layers: [
-      {
-        id: 'osm',
-        type: 'raster',
-        source: 'osm',
-      },
-    ],
-  };
 }
