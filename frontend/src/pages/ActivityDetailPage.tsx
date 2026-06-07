@@ -536,7 +536,8 @@ function MiniStreamChart({
             margin={{ top: 6, right: 8, bottom: 0, left: 0 }}
             onMouseLeave={() => onHighlightProgress(null)}
             onMouseMove={(state) => {
-              const point = state.activePayload?.[0]?.payload;
+              const index = Number(state.activeTooltipIndex);
+              const point = Number.isFinite(index) ? data[index] : null;
               if (isChartPoint(point)) {
                 onHighlightProgress(point.progress);
               }

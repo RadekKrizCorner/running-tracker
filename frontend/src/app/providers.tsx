@@ -13,9 +13,7 @@ export function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <LanguageProvider>
-        <BrowserRouter basename={APP_BASE_PATH} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
-          {children}
-        </BrowserRouter>
+        <BrowserRouter basename={APP_BASE_PATH}>{children}</BrowserRouter>
       </LanguageProvider>
     </QueryClientProvider>
   );

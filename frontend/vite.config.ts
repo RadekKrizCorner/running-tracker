@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
     base: env.VITE_BASE_PATH || '/',
     plugins: [react()],
     build: {
-      chunkSizeWarningLimit: 900,
+      chunkSizeWarningLimit: 1100,
       rollupOptions: {
         output: {
           manualChunks(id) {

@@ -170,7 +170,7 @@ function renderRouteExplorer() {
   render(
     <QueryClientProvider client={queryClient}>
       <LanguageProvider initialLocale="en-US">
-        <MemoryRouter future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+        <MemoryRouter>
           <RouteExplorerPage />
         </MemoryRouter>
       </LanguageProvider>

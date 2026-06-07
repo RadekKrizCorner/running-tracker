@@ -20,7 +20,7 @@ spec:
     spec:
       initContainers:
         - name: wait-for-postgres
-          image: postgres:16-alpine
+          image: postgres:18-alpine
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_USER
@@ -76,7 +76,7 @@ spec:
             - secretRef:
                 name: running-tracker-secret
         - name: wait-for-redis
-          image: redis:7-alpine
+          image: redis:8-alpine
           imagePullPolicy: IfNotPresent
           command:
             - sh

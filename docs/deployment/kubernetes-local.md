@@ -24,6 +24,11 @@ infra/k8s/overlays/local
 
 `base` defines the workloads. `overlays/local` defines local URLs, local image tags, namespace, and generated config/secrets.
 
+The current manifests use PostgreSQL 18 and Redis 8. If an existing local
+cluster was created with an older PostgreSQL major version, make a `pg_dump`
+backup and restore it into a fresh PostgreSQL 18 data volume instead of
+starting the PostgreSQL 18 container against the old data directory.
+
 ## Prerequisites
 
 ```bash

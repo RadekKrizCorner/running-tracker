@@ -25,8 +25,8 @@ The frontend is a React application created with Vite. `frontend/src/app/provide
 
 ## Runtime Services
 
-- `db`: PostgreSQL 16, persistent `postgres_data` volume.
-- `redis`: Redis 7 for RQ jobs.
+- `db`: PostgreSQL 18, persistent `postgres_data` volume.
+- `redis`: Redis 8 for RQ jobs.
 - `api`: FastAPI with Alembic migrations before startup.
 - `worker`: RQ worker for background jobs.
 - `scheduler`: periodic Strava sync enqueue loop and optional daily portfolio demo refresh.

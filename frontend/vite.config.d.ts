@@ -1,2 +1,2 @@
-declare const _default: import("vitest/config").UserConfigFnObject;
+declare const _default: import("vitest/config").ViteUserConfigFnObject;
 export default _default;

@@ -19,9 +19,9 @@ Personal running tracker for importing Strava runs, monitoring training progress
 
 | Area | Stack |
 | --- | --- |
-| Backend | Python 3.12, FastAPI, SQLAlchemy 2, Alembic |
-| Data | PostgreSQL 16, Redis, RQ |
-| Frontend | React, TypeScript, Vite, TanStack Query, Recharts, MapLibre |
+| Backend | Python 3.14, FastAPI, SQLAlchemy 2, Alembic |
+| Data | PostgreSQL 18, Redis 8, RQ |
+| Frontend | React 19, TypeScript 6, Vite 8, TanStack Query, Recharts, MapLibre |
 | Integrations | Strava OAuth/API, optional elevation provider, optional self-hosted Valhalla routing |
 | Testing | pytest, Vitest, Testing Library |
 | Deployment | Docker Compose, production Compose, local Kubernetes manifests |
@@ -93,8 +93,8 @@ The demo account is public and read-only. Its data is generated separately from 
 ### Prerequisites
 
 - Docker and Docker Compose
-- Node 22+ for local frontend work outside Docker
-- Python 3.12+ for local backend work outside Docker
+- Node 26+ for local frontend work outside Docker
+- Python 3.14+ for local backend work outside Docker
 - Native Cairo/Pango libraries for local PNG report rendering outside Docker. Docker installs these automatically. On macOS with Homebrew, install `cairo`, `pango`, and `gdk-pixbuf`; on Debian/Ubuntu, install `libcairo2`, `libpango-1.0-0`, `libpangocairo-1.0-0`, and `libgdk-pixbuf-2.0-0`.
 
 ### Run With Docker Compose

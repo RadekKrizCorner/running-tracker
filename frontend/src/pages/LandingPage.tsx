@@ -1,4 +1,4 @@
-import { Activity, BarChart3, CalendarDays, CheckCircle2, Github, LockKeyhole, Map, Route, ShieldCheck, TrendingUp, Trophy } from 'lucide-react';
+import { Activity, BarChart3, CalendarDays, CheckCircle2, Code, LockKeyhole, Map, Route, ShieldCheck, TrendingUp, Trophy } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import heroRunner from '../assets/landing/landing-hero-runner.webp';
@@ -116,7 +116,7 @@ export function LandingPage() {
               target="_blank"
               rel="noopener noreferrer"
             >
-              <Github size={18} strokeWidth={2.2} aria-hidden="true" />
+              <Code size={18} strokeWidth={2.2} aria-hidden="true" />
             </a>
             <Link className="landing-login-link" to="/login">{t('auth.loginButton')}</Link>
           </div>

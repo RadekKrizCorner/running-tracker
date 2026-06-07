@@ -2,6 +2,11 @@
 
 This guide covers day-to-day operation of the local `kind` cluster for Running Tracker.
 
+The current manifests run PostgreSQL 18 and Redis 8. PostgreSQL major upgrades
+are not in-place image swaps: take a `pg_dump` backup, recreate the data volume,
+and restore into the new major version before applying a manifest that changes
+the PostgreSQL image major version.
+
 ## Cluster Basics
 
 Use this context and namespace:
