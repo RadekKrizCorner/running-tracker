@@ -16,7 +16,7 @@ import { useUpdateUserPreferences, useUserPreferences } from '../features/profil
 import { addDaysToIso, weekdayLabel, weekStartIso } from '../lib/date';
 import { formatDate, formatDistance, formatDuration, formatShortDate, getFormatLocale } from '../lib/format';
 import { enumLabel, useTranslation } from '../lib/i18n';
-import type { PlannedWorkout, WeeklyMetric, WorkoutPoolItem, WorkoutTemplate } from '../lib/api/types';
+import type { CalendarEvent, PlannedWorkout, WeeklyMetric, WorkoutPoolItem, WorkoutTemplate } from '../lib/api/types';
 
 type WeekRow = {
   local_id: string;
@@ -30,6 +30,7 @@ type WeekRow = {
   target_distance_km: string;
   target_intensity: string;
   instructions: string;
+  race_event_id?: string;
 };
 
 type WeekDayPlan = {
@@ -231,6 +232,38 @@ function doubleThresholdRows(date: string, startOrder: number, t: TranslateFn): 
   ];
 }
 
+function raceInstructions(event: CalendarEvent, t: TranslateFn) {
+  return [t('plans.linkedRaceEvent', { name: event.title, date: formatDate(event.event_date) }), event.notes].filter(Boolean).join('\n');
+}
+
+function raceSessionUpdatesFromEvent(event: CalendarEvent, t: TranslateFn): Partial<WeekRow> {
+  return {
+    template_id: '',
+    race_event_id: event.id,
+    title: event.title,
+    workout_type: 'race',
+    target_intensity: 'race',
+    instructions: raceInstructions(event, t),
+  };
+}
+
+function rowFromRaceEvent(date: string, event: CalendarEvent | null, index: number, t: TranslateFn): WeekRow {
+  return {
+    local_id: makeLocalId(date, index),
+    scheduled_date: date,
+    template_id: '',
+    session_label: '',
+    sort_order: index,
+    title: event?.title ?? t('plans.defaultRaceTitle'),
+    workout_type: 'race',
+    target_duration_min: '',
+    target_distance_km: '',
+    target_intensity: 'race',
+    instructions: event ? raceInstructions(event, t) : '',
+    race_event_id: event?.id,
+  };
+}
+
 export function PlansPage() {
   const { t } = useTranslation();
   const me = useMe();
@@ -244,6 +277,7 @@ export function PlansPage() {
   const updatePreferences = useUpdateUserPreferences();
   const workoutPool = useWorkoutPool();
   const calendar = useCalendar(weekStart, weekEnd);
+  const calendarEvents = calendar.data?.events ?? [];
   const longTermEnd = addDaysToIso(horizonStart, LONG_TERM_WEEK_COUNT * DAYS_PER_WEEK - 1);
   const longTermCalendar = useCalendar(horizonStart, longTermEnd);
   const recentLoadWeeks = useRecentWeeklyAnalytics(6);
@@ -503,6 +537,37 @@ export function PlansPage() {
     appendDaySessions(date, doubleThresholdRows(date, nextSortOrder(day.sessions), t));
   }
 
+  function addRace(date: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
+    const day = days.find((item) => item.scheduled_date === date) ?? emptyDay(date);
+    if (!clearRestIfConfirmed(day)) {
+      return;
+    }
+    const raceEvent = raceEventsForDay(calendarEvents, date)[0] ?? null;
+    const raceRow = rowFromRaceEvent(date, raceEvent, nextSortOrder(day.sessions), t);
+    appendDaySessions(date, [raceRow]);
+    setSelectedSessionLocalId(raceRow.local_id);
+  }
+
+  function applyRaceEvent(date: string, localId: string, eventId: string) {
+    if (isReadOnlyDemo) {
+      return;
+    }
+    const raceEvent = calendarEvents.find((event) => event.id === eventId);
+    if (!raceEvent) {
+      updateSession(date, localId, {
+        template_id: '',
+        race_event_id: '',
+        workout_type: 'race',
+        target_intensity: 'race',
+      });
+      return;
+    }
+    updateSession(date, localId, raceSessionUpdatesFromEvent(raceEvent, t));
+  }
+
   function deleteSession(date: string, localId: string) {
     if (isReadOnlyDemo) {
       return;
@@ -715,6 +780,7 @@ export function PlansPage() {
           day={selectedDay}
           weekDates={weekDates}
           weekEnd={weekEnd}
+          events={calendarEvents}
           selectedSessionId={selectedSession?.local_id ?? null}
           onClose={() => setDayEditorOpen(false)}
           onUpdate={updateSession}
@@ -727,6 +793,8 @@ export function PlansPage() {
           onClear={clearDay}
           onAddEasy={addEasyRun}
           onAddDoubleThreshold={addDoubleThreshold}
+          onAddRace={addRace}
+          onSelectRaceEvent={applyRaceEvent}
           readOnly={isReadOnlyDemo}
           disabledReason={mutationDisabledReason}
         />
@@ -1067,6 +1135,7 @@ function DayEditorModal({
   day,
   weekDates,
   weekEnd,
+  events,
   selectedSessionId,
   onClose,
   onUpdate,
@@ -1079,12 +1148,15 @@ function DayEditorModal({
   onClear,
   onAddEasy,
   onAddDoubleThreshold,
+  onAddRace,
+  onSelectRaceEvent,
   readOnly,
   disabledReason,
 }: {
   day: WeekDayPlan;
   weekDates: string[];
   weekEnd: string;
+  events: CalendarEvent[];
   selectedSessionId: string | null;
   onClose: () => void;
   onUpdate: (date: string, localId: string, updates: Partial<WeekRow>) => void;
@@ -1097,12 +1169,17 @@ function DayEditorModal({
   onClear: (date: string) => void;
   onAddEasy: (date: string) => void;
   onAddDoubleThreshold: (date: string) => void;
+  onAddRace: (date: string) => void;
+  onSelectRaceEvent: (date: string, localId: string, eventId: string) => void;
   readOnly: boolean;
   disabledReason?: string;
 }) {
   const { t } = useTranslation();
   const draftSession = useMemo(() => emptySession(day.scheduled_date), [day.scheduled_date]);
   const editableSessions = day.sessions.length > 0 ? day.sessions : [draftSession];
+  const raceEventOptions = useMemo(() => raceEventsForDay(events, day.scheduled_date), [day.scheduled_date, events]);
+  const dayOverview = overviewFromDays([day]);
+  const plannedSessionCount = day.sessions.filter(rowHasWorkout).length;
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <section
@@ -1121,191 +1198,269 @@ function DayEditorModal({
             <X size={18} />
           </button>
         </div>
-        <div className="day-editor-actions">
-          <div className="day-editor-primary-actions">
-            <button className="secondary-button" type="button" onClick={() => onAddEasy(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
-              {t('plans.addEasyRun')}
-            </button>
-            <button className="secondary-button" type="button" onClick={() => onAddDoubleThreshold(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
-              {t('plans.addDoubleThreshold')}
-            </button>
+        <section className="day-editor-overview" aria-labelledby="day-editor-setup-heading">
+          <div>
+            <p className="eyebrow">{t('plans.daySetup')}</p>
+            <h3 id="day-editor-setup-heading">{t('plans.daySetup')}</h3>
+            <span>{t('plans.daySetupHelp', { date: formatDate(day.scheduled_date) })}</span>
           </div>
-          <div className="day-editor-danger-actions">
-            <button className="secondary-button danger-lite" type="button" onClick={() => onRest(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
-              {t('plans.markWholeDayRest')}
-            </button>
-            <button className="secondary-button danger-lite" type="button" onClick={() => onClear(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
-              {t('plans.clearWholeDay')}
-            </button>
+          <div className="day-editor-overview-metrics">
+            <span>
+              <strong>{plannedSessionCount}</strong>
+              <small>{t('plans.sessionsShort')}</small>
+            </span>
+            <span>
+              <strong>{formatDistance(dayOverview.plannedDistanceM)}</strong>
+              <small>{t('plans.plannedDistance')}</small>
+            </span>
+            <span>
+              <strong>{formatDuration(dayOverview.plannedTimeS)}</strong>
+              <small>{t('plans.plannedTime')}</small>
+            </span>
           </div>
-        </div>
-        <div className="day-editor-session-list">
-          {editableSessions.map((session, index) => {
-            const sessionNumber = index + 1;
-            const isWorkout = rowHasWorkout(session);
-            const isSelected = selectedSessionId === session.local_id || (!selectedSessionId && index === 0);
-            return (
-            <section
-              className={`day-editor-session ${isSelected ? 'selected' : ''}`}
-              key={session.local_id}
-              onClick={() => onSelectSession(session.local_id)}
-              onFocusCapture={() => onSelectSession(session.local_id)}
-            >
-              <div className="session-heading">
-                <div>
-                  <strong>{t('plans.sessionNumber', { count: sessionNumber })}</strong>
-                  {session.session_label ? <span>{session.session_label}</span> : null}
-                  {isSelected ? <small>{t('plans.selectedSession')}</small> : null}
-                </div>
-                <div className="session-actions">
-                  <button
-                    className="icon-button compact"
-                    type="button"
-                    aria-label={t('plans.moveSessionLeft', { count: sessionNumber })}
-                    title={readOnly ? disabledReason : t('plans.moveSessionLeft', { count: sessionNumber })}
-                    disabled={readOnly || !isWorkout || day.scheduled_date === weekDates[0]}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onMoveSession(day.scheduled_date, session.local_id, -1);
-                    }}
-                  >
-                    <ArrowLeft size={15} />
-                  </button>
-                  <button
-                    className="icon-button compact"
-                    type="button"
-                    aria-label={t('plans.moveSessionRight', { count: sessionNumber })}
-                    title={readOnly ? disabledReason : t('plans.moveSessionRight', { count: sessionNumber })}
-                    disabled={readOnly || !isWorkout || day.scheduled_date === weekEnd}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onMoveSession(day.scheduled_date, session.local_id, 1);
-                    }}
-                  >
-                    <ArrowRight size={15} />
-                  </button>
-                  <button
-                    className="icon-button compact"
-                    type="button"
-                    aria-label={t('plans.duplicateSession', { count: sessionNumber })}
-                    title={readOnly ? disabledReason : t('plans.duplicateSession', { count: sessionNumber })}
-                    disabled={readOnly || !isWorkout}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDuplicateSession(day.scheduled_date, session.local_id);
-                    }}
-                  >
-                    <Copy size={15} />
-                  </button>
-                  <button
-                    className="icon-button compact"
-                    type="button"
-                    aria-label={t('plans.addSessionToPool', { count: sessionNumber })}
-                    title={readOnly ? disabledReason : t('plans.addSessionToPool', { count: sessionNumber })}
-                    disabled={readOnly || !isWorkout || session.workout_type === 'rest'}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onAddSessionPool(session);
-                    }}
-                  >
-                    <Archive size={15} />
-                  </button>
-                  <button
-                    className="icon-button compact danger"
-                    type="button"
-                    aria-label={t('plans.deleteSession', { count: sessionNumber })}
-                    title={readOnly ? disabledReason : t('plans.deleteSession', { count: sessionNumber })}
+        </section>
+        <section className="day-editor-action-panel" aria-labelledby="day-editor-actions-heading">
+          <div className="day-editor-section-heading">
+            <div>
+              <h3 id="day-editor-actions-heading">{t('plans.quickActions')}</h3>
+              <small>{t('plans.quickActionsHelp')}</small>
+            </div>
+          </div>
+          <div className="day-editor-actions">
+            <div className="day-editor-primary-actions">
+              <button className="secondary-button" type="button" onClick={() => onAddEasy(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+                {t('plans.addEasyRun')}
+              </button>
+              <button className="secondary-button" type="button" onClick={() => onAddDoubleThreshold(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+                {t('plans.addDoubleThreshold')}
+              </button>
+              <button className="secondary-button" type="button" onClick={() => onAddRace(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+                {t('plans.addRace')}
+              </button>
+            </div>
+            <div className="day-editor-danger-actions">
+              <button className="secondary-button danger-lite" type="button" onClick={() => onRest(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+                {t('plans.markWholeDayRest')}
+              </button>
+              <button className="secondary-button danger-lite" type="button" onClick={() => onClear(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
+                {t('plans.clearWholeDay')}
+              </button>
+            </div>
+          </div>
+        </section>
+        <section className="day-editor-sessions-panel" aria-labelledby="day-editor-sessions-heading">
+          <div className="day-editor-section-heading">
+            <div>
+              <h3 id="day-editor-sessions-heading">{t('plans.plannedSessions')}</h3>
+              <small>{t('plans.plannedSessionsHelp')}</small>
+            </div>
+          </div>
+          <div className="day-editor-session-list">
+            {editableSessions.map((session, index) => {
+              const sessionNumber = index + 1;
+              const isWorkout = rowHasWorkout(session);
+              const isSelected = selectedSessionId === session.local_id || (!selectedSessionId && index === 0);
+              const selectedRaceEventId = selectedRaceEvent(session, raceEventOptions)?.id ?? '';
+              return (
+                <section
+                  className={`day-editor-session day-editor-session-card ${isSelected ? 'selected' : ''}`}
+                  key={session.local_id}
+                  onClick={() => onSelectSession(session.local_id)}
+                  onFocusCapture={() => onSelectSession(session.local_id)}
+                >
+                  <div className="session-heading">
+                    <div>
+                      <strong>{t('plans.sessionNumber', { count: sessionNumber })}</strong>
+                      {session.session_label ? <span>{session.session_label}</span> : null}
+                      {isSelected ? <small>{t('plans.selectedSession')}</small> : null}
+                    </div>
+                    <div className="session-actions">
+                      <button
+                        className="icon-button compact"
+                        type="button"
+                        aria-label={t('plans.moveSessionLeft', { count: sessionNumber })}
+                        title={readOnly ? disabledReason : t('plans.moveSessionLeft', { count: sessionNumber })}
+                        disabled={readOnly || !isWorkout || day.scheduled_date === weekDates[0]}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onMoveSession(day.scheduled_date, session.local_id, -1);
+                        }}
+                      >
+                        <ArrowLeft size={15} />
+                      </button>
+                      <button
+                        className="icon-button compact"
+                        type="button"
+                        aria-label={t('plans.moveSessionRight', { count: sessionNumber })}
+                        title={readOnly ? disabledReason : t('plans.moveSessionRight', { count: sessionNumber })}
+                        disabled={readOnly || !isWorkout || day.scheduled_date === weekEnd}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onMoveSession(day.scheduled_date, session.local_id, 1);
+                        }}
+                      >
+                        <ArrowRight size={15} />
+                      </button>
+                      <button
+                        className="icon-button compact"
+                        type="button"
+                        aria-label={t('plans.duplicateSession', { count: sessionNumber })}
+                        title={readOnly ? disabledReason : t('plans.duplicateSession', { count: sessionNumber })}
+                        disabled={readOnly || !isWorkout}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDuplicateSession(day.scheduled_date, session.local_id);
+                        }}
+                      >
+                        <Copy size={15} />
+                      </button>
+                      <button
+                        className="icon-button compact"
+                        type="button"
+                        aria-label={t('plans.addSessionToPool', { count: sessionNumber })}
+                        title={readOnly ? disabledReason : t('plans.addSessionToPool', { count: sessionNumber })}
+                        disabled={readOnly || !isWorkout || session.workout_type === 'rest'}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onAddSessionPool(session);
+                        }}
+                      >
+                        <Archive size={15} />
+                      </button>
+                      <button
+                        className="icon-button compact danger"
+                        type="button"
+                        aria-label={t('plans.deleteSession', { count: sessionNumber })}
+                        title={readOnly ? disabledReason : t('plans.deleteSession', { count: sessionNumber })}
+                        disabled={readOnly}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onDeleteSession(day.scheduled_date, session.local_id);
+                        }}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="week-row-fields vertical">
+                    <input
+                      aria-label={`${t('plans.sessionLabel')} ${day.scheduled_date} ${sessionNumber}`}
+                      placeholder={t('plans.sessionLabel')}
+                      value={session.session_label}
+                      disabled={readOnly}
+                      title={disabledReason}
+                      onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', session_label: event.target.value })}
+                    />
+                    <input
+                      aria-label={`${t('plans.titleField')} ${day.scheduled_date} ${sessionNumber}`}
+                      placeholder={t('plans.titleField')}
+                      value={session.title}
+                      disabled={readOnly}
+                      title={disabledReason}
+                      onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', title: event.target.value })}
+                    />
+                    <select
+                      aria-label={`${t('plans.workoutType')} ${day.scheduled_date} ${sessionNumber}`}
+                      value={session.workout_type}
+                      disabled={readOnly}
+                      title={disabledReason}
+                      onChange={(event) => {
+                        const workoutType = event.target.value;
+                        const defaultRaceEvent = raceEventOptions[0] ?? null;
+                        const raceUpdates = defaultRaceEvent
+                          ? raceSessionUpdatesFromEvent(defaultRaceEvent, t)
+                          : {
+                              template_id: '',
+                              race_event_id: '',
+                              title: session.title || t('plans.defaultRaceTitle'),
+                              workout_type: 'race',
+                              target_intensity: 'race',
+                            };
+                        onUpdate(
+                          day.scheduled_date,
+                          session.local_id,
+                          workoutType === 'race' ? raceUpdates : { template_id: '', race_event_id: '', workout_type: workoutType },
+                        );
+                      }}
+                    >
+                      <WorkoutTypeOptions />
+                    </select>
+                    {session.workout_type === 'race' ? (
+                      <label className="race-event-field">
+                        <span>{t('plans.raceEvent')}</span>
+                        <select
+                          aria-label={`${t('plans.raceEvent')} ${day.scheduled_date} ${sessionNumber}`}
+                          value={selectedRaceEventId}
+                          disabled={readOnly || raceEventOptions.length === 0}
+                          title={disabledReason}
+                          onChange={(event) => onSelectRaceEvent(day.scheduled_date, session.local_id, event.target.value)}
+                        >
+                          <option value="">{raceEventOptions.length > 0 ? t('plans.selectRaceEvent') : t('plans.noRaceEvents')}</option>
+                          {raceEventOptions.map((event) => (
+                            <option value={event.id} key={event.id}>
+                              {raceEventLabel(event, t)}
+                            </option>
+                          ))}
+                        </select>
+                        <small>{raceEventOptions.length > 0 ? t('plans.raceEventHelp') : t('plans.noRaceEvents')}</small>
+                      </label>
+                    ) : null}
+                    <div className="training-target-fields">
+                      <div className="training-target-heading">
+                        <strong>{t('plans.trainingTargets')}</strong>
+                        <small>{t('plans.trainingTargetsHelp')}</small>
+                      </div>
+                      <div className="field-pair metric-field-pair">
+                        <MetricInputField
+                          ariaLabel={`${t('plans.targetDistance')} ${t('plans.kilometersShort')} ${day.scheduled_date} ${sessionNumber}`}
+                          helper={t('plans.targetDistanceHelp')}
+                          inputMode="decimal"
+                          label={t('plans.targetDistance')}
+                          placeholder={t('plans.distancePlaceholder')}
+                          unit={t('plans.kilometersShort')}
+                          value={session.target_distance_km}
+                          disabled={readOnly}
+                          title={disabledReason}
+                          onChange={(value) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_distance_km: value })}
+                        />
+                        <MetricInputField
+                          ariaLabel={`${t('plans.targetDuration')} ${t('plans.minutesShort')} ${day.scheduled_date} ${sessionNumber}`}
+                          helper={t('plans.targetDurationHelp')}
+                          inputMode="numeric"
+                          label={t('plans.targetDuration')}
+                          placeholder={t('plans.durationPlaceholder')}
+                          unit={t('plans.minutesShort')}
+                          value={session.target_duration_min}
+                          disabled={readOnly}
+                          title={disabledReason}
+                          onChange={(value) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_duration_min: value })}
+                        />
+                      </div>
+                    </div>
+                    <select
+                      aria-label={`${t('common.intensity')} ${day.scheduled_date} ${sessionNumber}`}
+                      value={session.target_intensity}
+                      disabled={readOnly}
+                      title={disabledReason}
+                      onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_intensity: event.target.value })}
+                    >
+                      <IntensityOptions />
+                    </select>
+                  </div>
+                  <textarea
+                    aria-label={`${t('plans.instructions')} ${day.scheduled_date} ${sessionNumber}`}
+                    rows={4}
+                    placeholder={t('plans.instructions')}
+                    value={session.instructions}
                     disabled={readOnly}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onDeleteSession(day.scheduled_date, session.local_id);
-                    }}
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </div>
-              <div className="week-row-fields vertical">
-                <input
-                  aria-label={`${t('plans.sessionLabel')} ${day.scheduled_date} ${sessionNumber}`}
-                  placeholder={t('plans.sessionLabel')}
-                  value={session.session_label}
-                  disabled={readOnly}
-                  title={disabledReason}
-                  onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', session_label: event.target.value })}
-                />
-                <input
-                  aria-label={`${t('plans.titleField')} ${day.scheduled_date} ${sessionNumber}`}
-                  placeholder={t('plans.titleField')}
-                  value={session.title}
-                  disabled={readOnly}
-                  title={disabledReason}
-                  onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', title: event.target.value })}
-                />
-                <select
-                  aria-label={`${t('plans.workoutType')} ${day.scheduled_date} ${sessionNumber}`}
-                  value={session.workout_type}
-                  disabled={readOnly}
-                  title={disabledReason}
-                  onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', workout_type: event.target.value })}
-                >
-                  <WorkoutTypeOptions />
-                </select>
-                <div className="training-target-fields">
-                  <div className="training-target-heading">
-                    <strong>{t('plans.trainingTargets')}</strong>
-                    <small>{t('plans.trainingTargetsHelp')}</small>
-                  </div>
-                  <div className="field-pair metric-field-pair">
-                    <MetricInputField
-                      ariaLabel={`${t('plans.targetDistance')} ${t('plans.kilometersShort')} ${day.scheduled_date} ${sessionNumber}`}
-                      helper={t('plans.targetDistanceHelp')}
-                      inputMode="decimal"
-                      label={t('plans.targetDistance')}
-                      placeholder={t('plans.distancePlaceholder')}
-                      unit={t('plans.kilometersShort')}
-                      value={session.target_distance_km}
-                      disabled={readOnly}
-                      title={disabledReason}
-                      onChange={(value) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_distance_km: value })}
-                    />
-                    <MetricInputField
-                      ariaLabel={`${t('plans.targetDuration')} ${t('plans.minutesShort')} ${day.scheduled_date} ${sessionNumber}`}
-                      helper={t('plans.targetDurationHelp')}
-                      inputMode="numeric"
-                      label={t('plans.targetDuration')}
-                      placeholder={t('plans.durationPlaceholder')}
-                      unit={t('plans.minutesShort')}
-                      value={session.target_duration_min}
-                      disabled={readOnly}
-                      title={disabledReason}
-                      onChange={(value) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_duration_min: value })}
-                    />
-                  </div>
-                </div>
-                <select
-                  aria-label={`${t('common.intensity')} ${day.scheduled_date} ${sessionNumber}`}
-                  value={session.target_intensity}
-                  disabled={readOnly}
-                  title={disabledReason}
-                  onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', target_intensity: event.target.value })}
-                >
-                  <IntensityOptions />
-                </select>
-              </div>
-              <textarea
-                aria-label={`${t('plans.instructions')} ${day.scheduled_date} ${sessionNumber}`}
-                rows={4}
-                placeholder={t('plans.instructions')}
-                value={session.instructions}
-                disabled={readOnly}
-                title={disabledReason}
-                onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', instructions: event.target.value })}
-              />
-            </section>
-          );
-          })}
-        </div>
+                    title={disabledReason}
+                    onChange={(event) => onUpdate(day.scheduled_date, session.local_id, { template_id: '', instructions: event.target.value })}
+                  />
+                </section>
+              );
+            })}
+          </div>
+        </section>
       </section>
     </div>
   );
@@ -1572,6 +1727,28 @@ function shortWeekday(value: string) {
   return new Intl.DateTimeFormat(getFormatLocale(), { weekday: 'short' }).format(new Date(`${value}T00:00:00`));
 }
 
+function raceEventsForDay(events: CalendarEvent[], date: string) {
+  return events.filter((event) => event.source_type === 'event' || event.event_type === 'race').sort((left, right) => {
+    const leftSameDay = left.event_date === date ? 0 : 1;
+    const rightSameDay = right.event_date === date ? 0 : 1;
+    if (leftSameDay !== rightSameDay) {
+      return leftSameDay - rightSameDay;
+    }
+    if (left.event_date !== right.event_date) {
+      return left.event_date.localeCompare(right.event_date);
+    }
+    return left.title.localeCompare(right.title);
+  });
+}
+
+function selectedRaceEvent(session: WeekRow, events: CalendarEvent[]) {
+  return events.find((event) => event.id === session.race_event_id) ?? events.find((event) => event.title === session.title && event.event_date === session.scheduled_date) ?? null;
+}
+
+function raceEventLabel(event: CalendarEvent, t: TranslateFn) {
+  return `${event.title} · ${formatDate(event.event_date)} · ${t(`eventType.${event.event_type}`)}`;
+}
+
 function WorkoutTypeOptions() {
   const { t } = useTranslation();
   return (
@@ -1584,6 +1761,7 @@ function WorkoutTypeOptions() {
       <option value="hills">{t('workout.hills')}</option>
       <option value="strength">{t('workout.strength')}</option>
       <option value="rest">{t('workout.rest')}</option>
+      <option value="race">{t('workout.race')}</option>
     </>
   );
 }

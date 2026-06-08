@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { addDaysToIso, weekStartIso } from '../lib/date';
 import { LanguageProvider } from '../lib/i18n';
@@ -57,6 +58,28 @@ describe('PlansPage', () => {
     expect(within(dialog).getByText('Cílový čas tréninku')).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/Vzdálenost.*km/i)).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/Čas.*min/i)).toBeInTheDocument();
+  });
+
+  test('organizes the day editor into a day overview quick actions and session cards', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const dialog = await openLongTermDay('Mon');
+
+    expect(within(dialog).getByRole('heading', { name: /Day setup/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('heading', { name: /Quick actions/i })).toBeInTheDocument();
+    expect(within(dialog).getByRole('heading', { name: /Planned sessions/i })).toBeInTheDocument();
+    expect(within(dialog).getByText(/Plan concrete work for/i)).toBeInTheDocument();
+    expect(dialog.querySelector('.day-editor-session-card')).not.toBeNull();
   });
 
   test('supports day editor quick actions for easy run rest and clear', async () => {
@@ -133,6 +156,54 @@ describe('PlansPage', () => {
         target_intensity: 'hard',
       },
     ]);
+  });
+
+  test('adds a race session from calendar events and saves it as a planned race workout', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    const currentWeek = weekStartIso();
+    const raceEvents = [
+      calendarEvent('event-1', currentWeek, 'Prague 10K'),
+      calendarEvent('event-2', currentWeek, 'Night trail'),
+    ];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (url.includes('/calendar/week') && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: raceEvents }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const dialog = await openLongTermDay('Mon');
+    await userEvent.click(within(dialog).getByRole('button', { name: /Add race/i }));
+    await userEvent.selectOptions(within(dialog).getByLabelText(new RegExp(`Race event ${currentWeek} 1`, 'i')), 'event-2');
+
+    expect(within(dialog).getByDisplayValue('Night trail')).toBeInTheDocument();
+    expect(within(dialog).getByLabelText(new RegExp(`Workout type ${currentWeek} 1`, 'i'))).toHaveValue('race');
+    expect(within(dialog).getByLabelText(new RegExp(`Intensity ${currentWeek} 1`, 'i'))).toHaveValue('race');
+
+    await userEvent.click(screen.getByRole('button', { name: /Save week/i }));
+
+    await waitFor(() => expect(calls.some(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST')).toBe(true));
+    const saveCall = calls.find(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST');
+    const body = JSON.parse(String(saveCall?.[1]?.body));
+    expect(body.workouts).toHaveLength(1);
+    expect(body.workouts[0]).toEqual(
+      expect.objectContaining({
+        scheduled_date: currentWeek,
+        title: 'Night trail',
+        workout_type: 'race',
+        target_intensity: 'race',
+        instructions: expect.stringContaining('Night trail'),
+      }),
+    );
   });
 
   test('deletes one session without clearing the rest of the day', async () => {
@@ -491,6 +562,15 @@ describe('PlansPage', () => {
     expect(within(futureWeekRow).getByRole('button', { name: /Open Tue, Long run/i })).toHaveClass('long-term-day-button');
   });
 
+  test('maps rest recovery long run and race plan types to the updated long-term colors', () => {
+    const css = readFileSync('src/styles.css', 'utf8');
+
+    expect(css).toMatch(/\.long-term-day-button\.type-recovery\s*{[^}]*border-top-color:\s*var\(--blue\)/s);
+    expect(css).toMatch(/\.long-term-day-button\.type-rest,\s*\.long-term-day-button\.rest\s*{[^}]*border-top-color:\s*var\(--blue\)/s);
+    expect(css).toMatch(/\.long-term-day-button\.type-long\s*{[^}]*border-top-color:\s*var\(--amber\)/s);
+    expect(css).toMatch(/\.long-term-day-button\.type-race\s*{[^}]*border-top-color:\s*#[0-9a-fA-F]{6}/s);
+  });
+
   test('keeps simplified long-term planning controls on the main page', async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('/analytics/recent-weeks?weeks=6')) {
@@ -660,6 +740,18 @@ function plannedWorkout(id: string, date: string, title: string, workoutType: st
     instructions: null,
     completed_activity_id: null,
     status: 'planned',
+  };
+}
+
+function calendarEvent(id: string, date: string, title: string, eventType = 'race') {
+  return {
+    id,
+    event_date: date,
+    event_type: eventType,
+    title,
+    notes: 'Race day note.',
+    source_type: 'event',
+    source_id: id,
   };
 }
 

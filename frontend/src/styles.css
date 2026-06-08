@@ -3608,15 +3608,19 @@ td a:hover {
   font-weight: 820;
 }
 
-.long-term-day-button.type-easy,
-.long-term-day-button.type-recovery {
+.long-term-day-button.type-easy {
   border-top-color: var(--green);
   background: rgba(238, 246, 241, 0.96);
 }
 
-.long-term-day-button.type-long {
+.long-term-day-button.type-recovery {
   border-top-color: var(--blue);
   background: rgba(237, 243, 255, 0.96);
+}
+
+.long-term-day-button.type-long {
+  border-top-color: var(--amber);
+  background: rgba(255, 248, 234, 0.96);
 }
 
 .long-term-day-button.type-tempo,
@@ -3633,8 +3637,13 @@ td a:hover {
 
 .long-term-day-button.type-rest,
 .long-term-day-button.rest {
-  border-top-color: var(--amber);
-  background: rgba(255, 248, 234, 0.96);
+  border-top-color: var(--blue);
+  background: rgba(237, 243, 255, 0.96);
+}
+
+.long-term-day-button.type-race {
+  border-top-color: #7c3aed;
+  background: rgba(246, 241, 255, 0.96);
 }
 
 .template-chip-list,
@@ -3702,6 +3711,73 @@ td a:hover {
   gap: 10px;
 }
 
+.day-editor-overview,
+.day-editor-action-panel,
+.day-editor-sessions-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+
+.day-editor-overview {
+  grid-template-columns: minmax(0, 1fr) minmax(220px, auto);
+  align-items: center;
+  background:
+    linear-gradient(135deg, rgba(237, 243, 255, 0.72), rgba(238, 244, 239, 0.88)),
+    #ffffff;
+}
+
+.day-editor-overview h3,
+.day-editor-section-heading h3 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.day-editor-overview span,
+.day-editor-section-heading small {
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.day-editor-overview-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, auto));
+  gap: 8px;
+}
+
+.day-editor-overview-metrics span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  padding: 9px 10px;
+  border: 1px solid rgba(47, 102, 208, 0.16);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.day-editor-overview-metrics strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.day-editor-overview-metrics small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 780;
+}
+
+.day-editor-section-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
 .day-editor-primary-actions,
 .day-editor-danger-actions {
   display: flex;
@@ -3753,10 +3829,32 @@ td a:hover {
   background: var(--surface-soft);
 }
 
+.day-editor-session-card {
+  background: #ffffff;
+}
+
 .day-editor-session.selected {
   border-color: rgba(47, 102, 208, 0.48);
   background: rgba(237, 243, 255, 0.78);
   box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.race-event-field {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  border-radius: var(--radius);
+  background: rgba(246, 241, 255, 0.78);
+  color: var(--text);
+  font-weight: 820;
+}
+
+.race-event-field small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.35;
 }
 
 .session-heading {
@@ -4950,6 +5048,11 @@ td a:hover {
   .session-heading {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .day-editor-overview,
+  .day-editor-overview-metrics {
+    grid-template-columns: 1fr;
   }
 
   .session-actions {
