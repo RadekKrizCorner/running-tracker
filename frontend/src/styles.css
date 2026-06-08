@@ -3603,7 +3603,7 @@ td a:hover {
 
 .long-term-week-row {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 92px;
+  grid-template-columns: 76px minmax(0, 1fr) 78px;
   gap: 5px;
   align-items: stretch;
 }
@@ -3623,7 +3623,6 @@ td a:hover {
 .long-term-week-label strong,
 .long-term-week-summary strong {
   min-width: 0;
-  overflow-wrap: anywhere;
   font-size: 13px;
   line-height: 1.15;
 }
@@ -3645,6 +3644,11 @@ td a:hover {
 .long-term-week-summary strong,
 .long-term-week-summary span,
 .long-term-week-summary small {
+  white-space: nowrap;
+}
+
+.long-term-summary-row {
+  display: block;
   white-space: nowrap;
 }
 
@@ -4698,15 +4702,16 @@ td a:hover {
   }
 
   .long-term-week-row {
-    grid-template-columns: 64px minmax(0, 1fr);
+    grid-template-columns: 76px minmax(0, 1fr);
   }
 
   .long-term-week-summary {
     grid-column: 2;
-    grid-template-columns: repeat(3, auto);
+    grid-template-columns: 1fr;
+    justify-items: end;
     justify-content: end;
     align-content: center;
-    gap: 10px;
+    gap: 3px;
   }
 
   .landing-proof-list div {
@@ -5012,6 +5017,8 @@ td a:hover {
 
   .long-term-week-summary {
     grid-column: auto;
+    grid-template-columns: 1fr;
+    justify-items: start;
   }
 
   .long-term-day-grid {

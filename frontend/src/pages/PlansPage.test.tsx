@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { addDaysToIso, weekStartIso } from '../lib/date';
+import { formatShortDate } from '../lib/format';
 import { LanguageProvider } from '../lib/i18n';
 import type { AppLocale } from '../lib/i18n';
 import { PlansPage } from './PlansPage';
@@ -677,9 +678,12 @@ describe('PlansPage', () => {
     expect(screen.queryByRole('heading', { name: /Planned load outlook/i })).not.toBeInTheDocument();
 
     const futureWeekRow = await screen.findByTestId(`long-term-week-${nextWeek}`);
+    expect(within(futureWeekRow).getByText(compactWeekRange(nextWeek))).toBeInTheDocument();
     expect(within(futureWeekRow).getByText('Long run')).toBeInTheDocument();
     expect(within(futureWeekRow).getAllByText('14.0 km').length).toBeGreaterThan(0);
     expect(within(futureWeekRow).getAllByText('1h 30m').length).toBeGreaterThan(0);
+    expect(futureWeekRow.querySelector('.long-term-summary-distance')).toHaveTextContent('14.0 km');
+    expect(futureWeekRow.querySelector('.long-term-summary-time')).toHaveTextContent('1h 30m');
     expect(within(futureWeekRow).getByRole('button', { name: /Open Tue, Long run/i })).toHaveClass('long-term-day-button');
   });
 
@@ -696,11 +700,12 @@ describe('PlansPage', () => {
     const css = readFileSync('src/styles.css', 'utf8');
 
     expect(cssDeclaration(css, '.planning-long-term-layout', 'grid-template-columns')).toBe('minmax(320px, 0.75fr) minmax(0, 1.25fr)');
-    expect(cssDeclaration(css, '.long-term-week-row', 'grid-template-columns')).toBe('64px minmax(0, 1fr) 92px');
+    expect(cssDeclaration(css, '.long-term-week-row', 'grid-template-columns')).toBe('76px minmax(0, 1fr) 78px');
     expect(cssDeclaration(css, '.long-term-week-row', 'gap')).toBe('5px');
     expect(cssDeclaration(css, '.long-term-day-grid', 'gap')).toBe('4px');
+    expect(cssDeclaration(css, '.long-term-summary-row', 'white-space')).toBe('nowrap');
     expect(css).toMatch(/\.long-term-week-summary\s*{[^}]*text-align:\s*right;/s);
-    expect(css).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.long-term-week-row\s*\{\s*grid-template-columns:\s*64px minmax\(0, 1fr\);/);
+    expect(css).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.long-term-week-row\s*\{\s*grid-template-columns:\s*76px minmax\(0, 1fr\);/);
   });
 
   test('keeps simplified long-term planning controls on the main page', async () => {
@@ -904,6 +909,14 @@ function weeklyMetric(weekStartDate: string, load: number, distanceM = 30000, mo
     unknown_time_s: 0,
     long_run_distance_m: 12000,
   };
+}
+
+function compactWeekRange(weekStart: string) {
+  return `${compactShortDate(weekStart)}-${compactShortDate(addDaysToIso(weekStart, 6))}`;
+}
+
+function compactShortDate(value: string) {
+  return formatShortDate(value).replace(/\s+/g, '');
 }
 
 function cssDeclaration(styles: string, selector: string, property: string) {

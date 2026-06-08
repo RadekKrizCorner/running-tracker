@@ -1186,11 +1186,12 @@ function LongTermWeekRow({
   onSelectDay: (date: string) => void;
 }) {
   const { t } = useTranslation();
+  const weekRange = compactWeekRange(week.weekStart);
   return (
     <div className="long-term-week-row" data-testid={`long-term-week-${week.weekStart}`}>
       <div className="long-term-week-label">
         <strong>{t('plans.weekNumber', { number: week.weekNumber })}</strong>
-        <small>{formatShortDate(week.weekStart)}</small>
+        <small>{weekRange}</small>
       </div>
       <div className="long-term-day-grid">
         {week.days.map((day) => (
@@ -1198,12 +1199,20 @@ function LongTermWeekRow({
         ))}
       </div>
       <div className="long-term-week-summary" aria-label={t('plans.weekSummary', { date: formatDate(week.weekStart) })}>
-        <strong>{formatDistance(week.overview.plannedDistanceM)}</strong>
-        <span>{formatDuration(week.overview.plannedTimeS)}</span>
-        <small>{Math.round(week.overview.plannedLoad)} {t('plans.loadShort')}</small>
+        <strong className="long-term-summary-row long-term-summary-distance">{formatDistance(week.overview.plannedDistanceM)}</strong>
+        <span className="long-term-summary-row long-term-summary-time">{formatDuration(week.overview.plannedTimeS)}</span>
+        <small className="long-term-summary-row">{Math.round(week.overview.plannedLoad)} {t('plans.loadShort')}</small>
       </div>
     </div>
   );
+}
+
+function compactWeekRange(weekStart: string) {
+  return `${compactShortDate(weekStart)}-${compactShortDate(addDaysToIso(weekStart, DAYS_PER_WEEK - 1))}`;
+}
+
+function compactShortDate(value: string) {
+  return formatShortDate(value).replace(/\s+/g, '');
 }
 
 function LongTermDayButton({ day, onSelect }: { day: WeekDayPlan; onSelect: () => void }) {
