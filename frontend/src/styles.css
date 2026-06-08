@@ -3521,7 +3521,7 @@ td a:hover {
 
 .planning-long-term-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.1fr);
+  grid-template-columns: minmax(320px, 0.75fr) minmax(0, 1.25fr);
   gap: 16px;
   align-items: start;
 }
@@ -3603,8 +3603,8 @@ td a:hover {
 
 .long-term-week-row {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr) 104px;
-  gap: 6px;
+  grid-template-columns: 64px minmax(0, 1fr) 92px;
+  gap: 5px;
   align-items: stretch;
 }
 
@@ -3614,7 +3614,7 @@ td a:hover {
   align-content: center;
   gap: 3px;
   min-width: 0;
-  padding: 8px 7px;
+  padding: 8px 5px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: var(--surface-soft);
@@ -3652,7 +3652,7 @@ td a:hover {
   display: grid;
   min-width: 0;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 5px;
+  gap: 4px;
 }
 
 .long-term-day-button {
@@ -4698,7 +4698,7 @@ td a:hover {
   }
 
   .long-term-week-row {
-    grid-template-columns: 72px minmax(0, 1fr);
+    grid-template-columns: 64px minmax(0, 1fr);
   }
 
   .long-term-week-summary {

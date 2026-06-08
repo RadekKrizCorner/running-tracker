@@ -695,11 +695,12 @@ describe('PlansPage', () => {
   test('keeps long-term week label and summary compact so day tiles get more width', () => {
     const css = readFileSync('src/styles.css', 'utf8');
 
-    expect(cssDeclaration(css, '.long-term-week-row', 'grid-template-columns')).toBe('72px minmax(0, 1fr) 104px');
-    expect(cssDeclaration(css, '.long-term-week-row', 'gap')).toBe('6px');
-    expect(cssDeclaration(css, '.long-term-day-grid', 'gap')).toBe('5px');
+    expect(cssDeclaration(css, '.planning-long-term-layout', 'grid-template-columns')).toBe('minmax(320px, 0.75fr) minmax(0, 1.25fr)');
+    expect(cssDeclaration(css, '.long-term-week-row', 'grid-template-columns')).toBe('64px minmax(0, 1fr) 92px');
+    expect(cssDeclaration(css, '.long-term-week-row', 'gap')).toBe('5px');
+    expect(cssDeclaration(css, '.long-term-day-grid', 'gap')).toBe('4px');
     expect(css).toMatch(/\.long-term-week-summary\s*{[^}]*text-align:\s*right;/s);
-    expect(css).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.long-term-week-row\s*\{\s*grid-template-columns:\s*72px minmax\(0, 1fr\);/);
+    expect(css).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.long-term-week-row\s*\{\s*grid-template-columns:\s*64px minmax\(0, 1fr\);/);
   });
 
   test('keeps simplified long-term planning controls on the main page', async () => {
