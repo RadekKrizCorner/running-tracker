@@ -8,6 +8,52 @@ import { toIsoDate } from '../../lib/date';
 import { AppShell } from './AppShell';
 
 describe('AppShell', () => {
+  test('collapses the desktop sidebar into an icon rail and expands it again', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(jsonResponse(responseForAppShellUrl(url)))));
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/plans']}>
+          <AppShell user={{ id: 'u1', email: 'owner@example.com', display_name: null, timezone: 'Europe/Prague', units: 'metric' }}>
+            <div>Page content</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const shell = screen.getByTestId('app-shell');
+    const desktopNav = screen.getByRole('navigation', { name: /Hlavní navigace/i });
+    const sidebar = desktopNav.closest('aside');
+    const collapseButton = screen.getByRole('button', { name: /Sbalit menu/i });
+
+    expect(shell).not.toHaveClass('sidebar-collapsed');
+    expect(sidebar).not.toHaveClass('collapsed');
+    expect(within(desktopNav).getByRole('link', { name: /Plány/i })).toHaveAttribute('title', 'Plány');
+
+    await userEvent.click(collapseButton);
+
+    expect(shell).toHaveClass('sidebar-collapsed');
+    expect(sidebar).toHaveClass('collapsed');
+    expect(within(desktopNav).getByRole('link', { name: /Plány/i })).toHaveClass('icon-only');
+    expect(screen.getByRole('button', { name: /Rozbalit menu/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Rozbalit menu/i }));
+
+    expect(shell).not.toHaveClass('sidebar-collapsed');
+    expect(sidebar).not.toHaveClass('collapsed');
+  });
+
+  test('defines animated desktop sidebar drawer sizing', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+
+    expect(cssDeclaration(styles, '.app-shell', 'grid-template-columns')).toBe('276px minmax(0, 1fr)');
+    expect(cssDeclaration(styles, '.app-shell', 'transition')).toBe('grid-template-columns 220ms ease');
+    expect(cssDeclaration(styles, '.app-shell.sidebar-collapsed', 'grid-template-columns')).toBe('78px minmax(0, 1fr)');
+    expect(cssDeclaration(styles, '.nav-link.icon-only', 'width')).toBe('54px');
+    expect(styles).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.app-shell\.sidebar-collapsed\s*\{\s*grid-template-columns:\s*1fr;/);
+  });
+
   test('opens mobile more navigation for secondary routes', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(jsonResponse(responseForAppShellUrl(url)))));
     const queryClient = new QueryClient();
