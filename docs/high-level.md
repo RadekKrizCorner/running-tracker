@@ -59,9 +59,9 @@ Calendar combines planned workouts, completed activities, custom calendar events
 
 ### Plans
 
-Plans is a manual weekly scheduler. The owner can choose a week, name the plan, add easy/rest/default workouts, drag or click reusable templates, create custom templates, use a workout pool, create multiple sessions on one day, and copy weeks.
+Plans is a long-term manual scheduler. The owner can browse 12 weeks ahead, open a specific day, add easy/rest/default workouts, click reusable templates from the header library, create custom templates, use a workout pool, and create multiple sessions on one day.
 
-The page computes planned distance, planned time, planned load, and session count live before saving.
+The page shows weekly summaries for planned distance/time/load and compares the last 6 actual weeks against the next 12 planned weeks for mileage and time.
 
 ### Events
 
