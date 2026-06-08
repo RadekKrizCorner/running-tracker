@@ -9,7 +9,7 @@ Personal running tracker for importing Strava runs, monitoring training progress
 - Strava OAuth import with server-side encrypted provider tokens.
 - Dashboard for weekly distance, time, load, intensity, consistency, and trends.
 - Activity detail pages with splits, heart-rate breakdowns, route maps, notes, and gear assignment.
-- Manual weekly planning with reusable workout templates, copy-week workflow, and plan-vs-actual comparison.
+- Long-term workout planning with reusable templates, per-day editing, and plan-vs-actual mileage/time outlook.
 - Calendar and event tracking for races, goal events, custom notes, and preparation metrics.
 - Route heatmap built from owner-scoped GPS stream aggregation.
 - Weekly report SVG/PNG generation plus an Instagram report builder with saved templates, weekly prefill, preview, and export.

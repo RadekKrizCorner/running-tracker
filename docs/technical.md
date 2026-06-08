@@ -381,7 +381,7 @@ Feature API modules define TanStack Query hooks:
 - `ActivitiesPage`: activity table and intensity filter.
 - `ActivityDetailPage`: metrics, map, stream charts, splits, HR zone breakdown, trail effort, notes.
 - `CalendarPage`: week/month calendar, custom event modal, day drawer.
-- `PlansPage`: manual weekly scheduler, multi-session day support, templates, workout pool, copy week, live planned metrics.
+- `PlansPage`: long-term weekly scheduler, per-day edit modal, multi-session day support, header template library, workout pool, and planned mileage/time outlook.
 - `EventsPage`: event list, event creation wizard, event preparation cards.
 - `EventDetailPage`: event metrics, readiness cockpit, editable details, GPX/course map, poster image, guidance, notes.
 - `TrendsPage`: trend charts, recent balance, durability, personal records, coach-effect signals.
