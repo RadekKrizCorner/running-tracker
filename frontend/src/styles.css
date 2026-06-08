@@ -3779,11 +3779,17 @@ td a:hover {
 }
 
 .day-editor-primary-actions,
+.day-editor-favorite-actions,
 .day-editor-danger-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.day-editor-favorite-actions {
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
 }
 
 .day-editor-danger-actions {

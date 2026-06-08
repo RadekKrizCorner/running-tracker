@@ -108,6 +108,50 @@ describe('PlansPage', () => {
     confirmSpy.mockRestore();
   });
 
+  test('shows favorite templates in day editor quick actions and applies them', async () => {
+    const preferenceBodies: unknown[] = [];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/profile/preferences') && init?.method === 'PATCH') {
+        preferenceBodies.push(JSON.parse(String(init.body)));
+        return Promise.resolve(
+          jsonResponse({
+            locale: 'cs-CZ',
+            dashboard_mode: 'advanced',
+            favorite_template_ids: ['long-template'],
+            recent_template_ids: ['long-template'],
+            pace_zones: [],
+          }),
+        );
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(
+          jsonResponse({
+            locale: 'cs-CZ',
+            dashboard_mode: 'advanced',
+            favorite_template_ids: ['long-template'],
+            recent_template_ids: [],
+            pace_zones: [],
+          }),
+        );
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([workoutTemplate(), workoutTemplate('long-template', 'Long run', 'long', 5400, 14000)]));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const dialog = await openLongTermDay('Mon');
+    const quickActions = dialog.querySelector('.day-editor-actions') as HTMLElement;
+
+    expect(quickActions).not.toBeNull();
+    await userEvent.click(within(quickActions).getByRole('button', { name: /Add favorite template Long run/i }));
+
+    expect(within(dialog).getByDisplayValue('Long run')).toBeInTheDocument();
+    await waitFor(() => expect(preferenceBodies).toContainEqual(expect.objectContaining({ recent_template_ids: ['long-template'] })));
+  });
+
   test('adds a double threshold day as two labeled sessions and saves them', async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url.includes('/calendar/week') && init?.method === 'POST') {

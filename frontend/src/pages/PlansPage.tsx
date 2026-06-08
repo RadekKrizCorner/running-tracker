@@ -313,6 +313,13 @@ export function PlansPage() {
       null
     );
   }, [templates.data]);
+  const favoriteTemplates = useMemo(() => {
+    const templatesById = new Map((templates.data ?? []).map((template) => [template.id, template]));
+    return favoriteTemplateIds.flatMap((templateId) => {
+      const template = templatesById.get(templateId);
+      return template ? [template] : [];
+    });
+  }, [favoriteTemplateIds, templates.data]);
   const visibleTemplates = useMemo(() => {
     const query = templateSearch.trim().toLowerCase();
     const items = templates.data ?? [];
@@ -794,6 +801,8 @@ export function PlansPage() {
           onAddEasy={addEasyRun}
           onAddDoubleThreshold={addDoubleThreshold}
           onAddRace={addRace}
+          favoriteTemplates={favoriteTemplates}
+          onApplyFavoriteTemplate={applyTemplate}
           onSelectRaceEvent={applyRaceEvent}
           readOnly={isReadOnlyDemo}
           disabledReason={mutationDisabledReason}
@@ -1149,6 +1158,8 @@ function DayEditorModal({
   onAddEasy,
   onAddDoubleThreshold,
   onAddRace,
+  favoriteTemplates,
+  onApplyFavoriteTemplate,
   onSelectRaceEvent,
   readOnly,
   disabledReason,
@@ -1170,6 +1181,8 @@ function DayEditorModal({
   onAddEasy: (date: string) => void;
   onAddDoubleThreshold: (date: string) => void;
   onAddRace: (date: string) => void;
+  favoriteTemplates: WorkoutTemplate[];
+  onApplyFavoriteTemplate: (date: string, templateId: string) => void;
   onSelectRaceEvent: (date: string, localId: string, eventId: string) => void;
   readOnly: boolean;
   disabledReason?: string;
@@ -1238,6 +1251,27 @@ function DayEditorModal({
                 {t('plans.addRace')}
               </button>
             </div>
+            {favoriteTemplates.length > 0 ? (
+              <div className="day-editor-favorite-actions" role="group" aria-label={t('plans.favoriteQuickActions')}>
+                {favoriteTemplates.map((template) => {
+                  const buttonLabel = t('plans.addFavoriteTemplate', { name: template.name });
+                  return (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      key={template.id}
+                      aria-label={buttonLabel}
+                      onClick={() => onApplyFavoriteTemplate(day.scheduled_date, template.id)}
+                      disabled={readOnly}
+                      title={readOnly ? disabledReason : buttonLabel}
+                    >
+                      <Star size={16} fill="currentColor" />
+                      {template.name}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <div className="day-editor-danger-actions">
               <button className="secondary-button danger-lite" type="button" onClick={() => onRest(day.scheduled_date)} disabled={readOnly} title={disabledReason}>
                 {t('plans.markWholeDayRest')}
