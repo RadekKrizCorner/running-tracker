@@ -38,6 +38,12 @@ type WeekDayPlan = {
   sessions: WeekRow[];
 };
 
+type WeekDraft = {
+  weekStart: string;
+  days: WeekDayPlan[];
+  savedFingerprint: string;
+};
+
 type PlanningOverview = {
   plannedDistanceM: number;
   plannedTimeS: number;
@@ -295,9 +301,12 @@ export function PlansPage() {
   const [templateSearch, setTemplateSearch] = useState('');
   const [favoriteTemplateIds, setFavoriteTemplateIds] = useState<string[]>([]);
   const [recentTemplateIds, setRecentTemplateIds] = useState<string[]>([]);
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [selectedSessionLocalId, setSelectedSessionLocalId] = useState<string | null>(null);
   const [pendingLongTermDate, setPendingLongTermDate] = useState<string | null>(null);
   const [savedPlanFingerprint, setSavedPlanFingerprint] = useState(() => weekPlanFingerprint(planTitle, days));
+  const [draftWeeks, setDraftWeeks] = useState<Record<string, WeekDraft>>({});
+  const draftWeeksRef = useRef<Record<string, WeekDraft>>({});
   const selectedDay = days.find((day) => day.scheduled_date === selectedDate) ?? days[0] ?? emptyDay(selectedDate);
   const selectedSession =
     selectedDay.sessions.find((session) => session.local_id === selectedSessionLocalId) ??
@@ -335,23 +344,55 @@ export function PlansPage() {
       })
       .sort((left, right) => templateRank(left, favoriteTemplateIds, recentTemplateIds) - templateRank(right, favoriteTemplateIds, recentTemplateIds));
   }, [favoriteTemplateIds, recentTemplateIds, templateSearch, templates.data]);
-  const currentPlanFingerprint = useMemo(() => weekPlanFingerprint(planTitle, days), [days, planTitle]);
-  const hasUnsavedChanges = currentPlanFingerprint !== savedPlanFingerprint;
-  const isReadOnlyDemo = me.data?.is_demo === true;
-  const mutationDisabledReason = isReadOnlyDemo ? t('plans.demoReadOnlyTooltip') : undefined;
   const currentDraftWeek = useMemo(() => {
     const matchesCurrentWeek = days.length === weekDates.length && days.every((day, index) => day.scheduled_date === weekDates[index]);
-    return matchesCurrentWeek ? { weekStart, days } : null;
-  }, [days, weekDates, weekStart]);
+    return matchesCurrentWeek ? { weekStart, days, savedFingerprint: savedPlanFingerprint } : null;
+  }, [days, savedPlanFingerprint, weekDates, weekStart]);
+  const draftWeeksWithCurrent = useMemo(() => {
+    if (!currentDraftWeek) {
+      return draftWeeks;
+    }
+    const previousDraft = draftWeeks[currentDraftWeek.weekStart];
+    if (previousDraft?.days === currentDraftWeek.days && previousDraft.savedFingerprint === currentDraftWeek.savedFingerprint) {
+      return draftWeeks;
+    }
+    return { ...draftWeeks, [currentDraftWeek.weekStart]: currentDraftWeek };
+  }, [currentDraftWeek, draftWeeks]);
+  const dirtyWeekDrafts = useMemo(
+    () =>
+      Object.values(draftWeeksWithCurrent)
+        .filter((draft) => weekPlanFingerprint(defaultPlanTitle(draft.weekStart, t), draft.days) !== draft.savedFingerprint)
+        .sort((left, right) => left.weekStart.localeCompare(right.weekStart)),
+    [draftWeeksWithCurrent, t],
+  );
+  const hasUnsavedChanges = dirtyWeekDrafts.length > 0;
+  const isReadOnlyDemo = me.data?.is_demo === true;
+  const mutationDisabledReason = isReadOnlyDemo ? t('plans.demoReadOnlyTooltip') : undefined;
+  const saveButtonLabel = isSavingSchedule || saveWeek.isPending
+    ? t('common.saving')
+    : dirtyWeekDrafts.length > 1
+      ? t('plans.saveWeeks', { count: dirtyWeekDrafts.length })
+      : t('plans.saveWeek');
   const longTermWeeks = useMemo(
-    () => buildLongTermWeeks(horizonStart, longTermCalendar.data?.planned_workouts ?? [], currentDraftWeek),
-    [currentDraftWeek, horizonStart, longTermCalendar.data?.planned_workouts],
+    () => buildLongTermWeeks(horizonStart, longTermCalendar.data?.planned_workouts ?? [], dirtyWeekDrafts),
+    [dirtyWeekDrafts, horizonStart, longTermCalendar.data?.planned_workouts],
   );
   const historicalLoadWeeks = Array.isArray(recentLoadWeeks.data) ? recentLoadWeeks.data : [];
 
   useEffect(() => {
     selectedDateRef.current = selectedDate;
   }, [selectedDate]);
+
+  useEffect(() => {
+    draftWeeksRef.current = draftWeeks;
+  }, [draftWeeks]);
+
+  useEffect(() => {
+    if (!currentDraftWeek) {
+      return;
+    }
+    cacheWeekDraft(currentDraftWeek);
+  }, [currentDraftWeek]);
 
   useEffect(() => {
     const workouts = calendar.data?.planned_workouts ?? [];
@@ -362,19 +403,25 @@ export function PlansPage() {
         .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
         .map((workout, index) => rowFromWorkout(date, workout, index)),
     }));
+    const loadedFingerprint = weekPlanFingerprint(planTitle, loadedDays);
+    const draft = draftWeeksRef.current[weekStart];
+    const draftIsDirty = draft ? weekPlanFingerprint(planTitle, draft.days) !== draft.savedFingerprint : false;
+    const activeDays = draft && draftIsDirty ? draft.days : loadedDays;
+    const activeSavedFingerprint = draft && draftIsDirty ? draft.savedFingerprint : loadedFingerprint;
     const pendingDateReady = Boolean(calendar.data && pendingLongTermDate && weekDates.includes(pendingLongTermDate));
     const fallbackSelectedDate = weekDates.includes(selectedDateRef.current) ? selectedDateRef.current : weekDates[0];
     const nextSelectedDate = pendingDateReady && pendingLongTermDate ? pendingLongTermDate : fallbackSelectedDate;
-    const nextSelectedDay = loadedDays.find((day) => day.scheduled_date === nextSelectedDate) ?? loadedDays[0];
-    setDays(loadedDays);
+    const nextSelectedDay = activeDays.find((day) => day.scheduled_date === nextSelectedDate) ?? activeDays[0];
+    setDays(activeDays);
     setSelectedDate(nextSelectedDate);
     setSelectedSessionLocalId(firstSelectableSessionId(nextSelectedDay));
-    setSavedPlanFingerprint(weekPlanFingerprint(planTitle, loadedDays));
+    setSavedPlanFingerprint(activeSavedFingerprint);
+    cacheWeekDraft({ weekStart, days: activeDays, savedFingerprint: activeSavedFingerprint });
     if (pendingDateReady) {
       setDayEditorOpen(true);
       setPendingLongTermDate(null);
     }
-  }, [calendar.data, calendar.data?.planned_workouts, pendingLongTermDate, planTitle, weekDates]);
+  }, [calendar.data, calendar.data?.planned_workouts, pendingLongTermDate, planTitle, weekDates, weekStart]);
 
   useEffect(() => {
     if (!preferences.data) {
@@ -458,12 +505,31 @@ export function PlansPage() {
     return window.confirm(t('plans.confirmDeleteSessions', { count }));
   }
 
+  function cacheWeekDraft(draft: WeekDraft) {
+    const previousDraft = draftWeeksRef.current[draft.weekStart];
+    if (previousDraft?.days === draft.days && previousDraft.savedFingerprint === draft.savedFingerprint) {
+      return;
+    }
+    const nextDrafts = { ...draftWeeksRef.current, [draft.weekStart]: draft };
+    draftWeeksRef.current = nextDrafts;
+    setDraftWeeks(nextDrafts);
+  }
+
+  function cacheCurrentWeekDraft() {
+    if (!currentDraftWeek) {
+      return;
+    }
+    cacheWeekDraft(currentDraftWeek);
+  }
+
   function openLongTermDay(date: string) {
+    cacheCurrentWeekDraft();
     setPendingLongTermDate(date);
     setWeekStart(weekStartIso(date));
   }
 
   function setPlanningAnchor(date: string) {
+    cacheCurrentWeekDraft();
     const nextWeekStart = weekStartIso(date);
     setHorizonStart(nextWeekStart);
     setWeekStart(nextWeekStart);
@@ -656,19 +722,40 @@ export function PlansPage() {
     });
   }
 
-  function saveSchedule() {
-    if (isReadOnlyDemo || !hasUnsavedChanges) {
+  async function saveSchedule() {
+    if (isReadOnlyDemo || dirtyWeekDrafts.length === 0 || isSavingSchedule) {
       return;
     }
-    const fingerprint = currentPlanFingerprint;
-    saveWeek.mutate(
-      { week_start_date: weekStart, plan_title: planTitle.trim(), workouts: plannedWorkoutPayloads(days) },
-      {
-        onSuccess: () => {
-          setSavedPlanFingerprint(fingerprint);
-        },
-      },
-    );
+    const draftsToSave = dirtyWeekDrafts;
+    setIsSavingSchedule(true);
+    try {
+      await Promise.all(
+        draftsToSave.map((draft) =>
+          saveWeek.mutateAsync({
+            week_start_date: draft.weekStart,
+            plan_title: defaultPlanTitle(draft.weekStart, t).trim(),
+            workouts: plannedWorkoutPayloads(draft.days),
+          }),
+        ),
+      );
+      const nextDrafts = { ...draftWeeksRef.current };
+      for (const draft of draftsToSave) {
+        nextDrafts[draft.weekStart] = {
+          ...draft,
+          savedFingerprint: weekPlanFingerprint(defaultPlanTitle(draft.weekStart, t), draft.days),
+        };
+      }
+      draftWeeksRef.current = nextDrafts;
+      setDraftWeeks(nextDrafts);
+      const currentDraft = nextDrafts[weekStart];
+      if (currentDraft) {
+        setSavedPlanFingerprint(currentDraft.savedFingerprint);
+      }
+    } catch {
+      return;
+    } finally {
+      setIsSavingSchedule(false);
+    }
   }
 
   function createReusableTemplate() {
@@ -754,8 +841,14 @@ export function PlansPage() {
             <Archive size={16} />
             {t('plans.templateLibrary')}
           </button>
-          <button className="primary-button" type="button" onClick={saveSchedule} disabled={isReadOnlyDemo || !hasUnsavedChanges || saveWeek.isPending} title={mutationDisabledReason}>
-            {saveWeek.isPending ? t('common.saving') : t('plans.saveWeek')}
+          <button
+            className="primary-button"
+            type="button"
+            onClick={saveSchedule}
+            disabled={isReadOnlyDemo || !hasUnsavedChanges || isSavingSchedule || saveWeek.isPending}
+            title={mutationDisabledReason}
+          >
+            {saveButtonLabel}
           </button>
           {hasUnsavedChanges ? <span className="unsaved-badge">{t('plans.unsavedChanges')}</span> : null}
         </div>
@@ -1658,13 +1751,14 @@ function overviewFromDays(days: WeekDayPlan[]): PlanningOverview {
   return overviewFromRows(days.flatMap((day) => day.sessions));
 }
 
-function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[], draftWeek: { weekStart: string; days: WeekDayPlan[] } | null = null): LongTermWeekPlan[] {
+function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[], draftWeeks: WeekDraft[] = []): LongTermWeekPlan[] {
   const workoutsByDate = workouts.reduce<Map<string, PlannedWorkout[]>>((byDate, workout) => {
     const current = byDate.get(workout.scheduled_date) ?? [];
     current.push(workout);
     byDate.set(workout.scheduled_date, current);
     return byDate;
   }, new Map());
+  const draftsByWeek = new Map(draftWeeks.map((draft) => [draft.weekStart, draft]));
   return Array.from({ length: LONG_TERM_WEEK_COUNT }, (_, weekIndex) => {
     const weekStart = addDaysToIso(startDate, weekIndex * DAYS_PER_WEEK);
     const savedDays = Array.from({ length: DAYS_PER_WEEK }, (_, dayIndex) => {
@@ -1676,7 +1770,7 @@ function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[], draft
           .map((workout, index) => rowFromWorkout(scheduledDate, workout, index)),
       };
     });
-    const days = draftWeek?.weekStart === weekStart ? draftWeek.days : savedDays;
+    const days = draftsByWeek.get(weekStart)?.days ?? savedDays;
     return {
       weekStart,
       weekNumber: isoWeekNumber(weekStart),

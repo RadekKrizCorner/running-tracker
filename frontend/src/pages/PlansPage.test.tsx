@@ -130,6 +130,61 @@ describe('PlansPage', () => {
     expect(within(weekRow).queryByRole('button', { name: /Open Mon, Unscheduled/i })).not.toBeInTheDocument();
   });
 
+  test('keeps edits for multiple weeks and saves each changed week', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    const currentWeek = weekStartIso();
+    const nextWeek = weekStartIso(addDaysToIso(currentWeek, 7));
+    const nextTuesday = addDaysToIso(nextWeek, 1);
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (url.includes('/calendar/week') && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([workoutTemplate()]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const currentDialog = await openLongTermDay('Mon');
+    await userEvent.click(within(currentDialog).getByRole('button', { name: /Add easy run/i }));
+    await userEvent.click(within(currentDialog).getByRole('button', { name: /Close day editor/i }));
+
+    const nextWeekRow = await screen.findByTestId(`long-term-week-${nextWeek}`);
+    await userEvent.click(within(nextWeekRow).getByRole('button', { name: /Open Tue, Unscheduled/i }));
+    const nextDialog = await screen.findByRole('dialog', { name: /Edit Tue/i });
+    await userEvent.click(within(nextDialog).getByRole('button', { name: /Add easy run/i }));
+    await userEvent.click(within(nextDialog).getByRole('button', { name: /Close day editor/i }));
+
+    expect(within(await screen.findByTestId(`long-term-week-${currentWeek}`)).getByRole('button', { name: /Open Mon, Easy run/i })).toBeInTheDocument();
+    expect(within(await screen.findByTestId(`long-term-week-${nextWeek}`)).getByRole('button', { name: /Open Tue, Easy run/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Save/i }));
+
+    await waitFor(() => expect(calls.filter(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST')).toHaveLength(2));
+    const saveBodies = calls
+      .filter(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST')
+      .map(([, init]) => JSON.parse(String(init?.body)));
+
+    expect(saveBodies).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          week_start_date: currentWeek,
+          workouts: [expect.objectContaining({ scheduled_date: currentWeek, template_id: 'easy-template' })],
+        }),
+        expect.objectContaining({
+          week_start_date: nextWeek,
+          workouts: [expect.objectContaining({ scheduled_date: nextTuesday, template_id: 'easy-template' })],
+        }),
+      ]),
+    );
+  });
+
   test('shows favorite templates in day editor quick actions and applies them', async () => {
     const preferenceBodies: unknown[] = [];
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
