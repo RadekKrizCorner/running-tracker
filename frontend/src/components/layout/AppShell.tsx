@@ -9,6 +9,8 @@ import {
   LogOut,
   Map,
   MoreHorizontal,
+  PanelLeftClose,
+  PanelLeftOpen,
   Route,
   Settings,
   Trash2,
@@ -62,6 +64,7 @@ export function AppShell({ user, children }: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [selectedAvatarIcon, setSelectedAvatarIcon] = useState<string | null>(null);
@@ -126,8 +129,8 @@ export function AppShell({ user, children }: AppShellProps) {
   };
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div className={sidebarCollapsed ? 'app-shell sidebar-collapsed' : 'app-shell'} data-testid="app-shell">
+      <aside className={sidebarCollapsed ? 'sidebar collapsed' : 'sidebar'}>
         <div className="brand">
           <button
             className="brand-mark brand-avatar-button"
@@ -148,7 +151,7 @@ export function AppShell({ user, children }: AppShellProps) {
               <UserCircle size={30} />
             )}
           </button>
-          <div>
+          <div className="brand-copy">
             <strong>{t('app.name')}</strong>
             <span>{user?.email}</span>
             {isDemo ? <span className="status-pill warning">{t('demo.badge')}</span> : null}
@@ -163,6 +166,15 @@ export function AppShell({ user, children }: AppShellProps) {
             >
               <Bell size={18} />
               {unreadCount > 0 ? <span>{unreadCount}</span> : null}
+            </button>
+            <button
+              className="sidebar-toggle"
+              type="button"
+              aria-label={t(sidebarCollapsed ? 'nav.expandSidebar' : 'nav.collapseSidebar')}
+              title={t(sidebarCollapsed ? 'nav.expandSidebar' : 'nav.collapseSidebar')}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
             </button>
             {notificationsOpen ? (
               <div className="notification-popover" role="dialog" aria-label={t('notifications.title')}>
@@ -214,20 +226,25 @@ export function AppShell({ user, children }: AppShellProps) {
             ) : null}
           </div>
         </div>
-        <nav>
+        <nav aria-label={t('nav.primaryNavigation')}>
           {navItems.map((item) => {
             const Icon = item.icon;
+            const label = t(item.labelKey);
+            const className = ({ isActive }: { isActive: boolean }) =>
+              [isActive ? 'nav-link active' : 'nav-link', sidebarCollapsed ? 'icon-only' : ''].filter(Boolean).join(' ');
             return (
-              <NavLink key={item.to} to={item.to} className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}>
+              <NavLink key={item.to} to={item.to} className={className} aria-label={label} title={label}>
                 <Icon size={18} />
-                <span>{t(item.labelKey)}</span>
+                <span className="nav-label">{label}</span>
               </NavLink>
             );
           })}
         </nav>
         <button
-          className="nav-link button-link"
+          className={sidebarCollapsed ? 'nav-link button-link icon-only' : 'nav-link button-link'}
           type="button"
+          aria-label={t('nav.logout')}
+          title={t('nav.logout')}
           onClick={() => {
             logout.mutate(undefined, {
               onSettled: () => navigate('/login'),
@@ -235,7 +252,7 @@ export function AppShell({ user, children }: AppShellProps) {
           }}
         >
           <LogOut size={18} />
-          <span>{t('nav.logout')}</span>
+          <span className="nav-label">{t('nav.logout')}</span>
         </button>
         <div className="sidebar-route-card">
           <span>{t('nav.today')}</span>
