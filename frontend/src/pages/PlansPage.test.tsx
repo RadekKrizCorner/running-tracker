@@ -692,6 +692,16 @@ describe('PlansPage', () => {
     expect(css).toMatch(/\.long-term-day-button\.type-race\s*{[^}]*border-top-color:\s*#[0-9a-fA-F]{6}/s);
   });
 
+  test('keeps long-term week label and summary compact so day tiles get more width', () => {
+    const css = readFileSync('src/styles.css', 'utf8');
+
+    expect(cssDeclaration(css, '.long-term-week-row', 'grid-template-columns')).toBe('72px minmax(0, 1fr) 104px');
+    expect(cssDeclaration(css, '.long-term-week-row', 'gap')).toBe('6px');
+    expect(cssDeclaration(css, '.long-term-day-grid', 'gap')).toBe('5px');
+    expect(css).toMatch(/\.long-term-week-summary\s*{[^}]*text-align:\s*right;/s);
+    expect(css).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.long-term-week-row\s*\{\s*grid-template-columns:\s*72px minmax\(0, 1fr\);/);
+  });
+
   test('keeps simplified long-term planning controls on the main page', async () => {
     const fetchMock = vi.fn((url: string) => {
       if (url.includes('/analytics/recent-weeks?weeks=6')) {
@@ -893,4 +903,11 @@ function weeklyMetric(weekStartDate: string, load: number, distanceM = 30000, mo
     unknown_time_s: 0,
     long_run_distance_m: 12000,
   };
+}
+
+function cssDeclaration(styles: string, selector: string, property: string) {
+  const selectorPattern = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = styles.match(new RegExp(`${selectorPattern}\\s*\\{([^}]*)\\}`));
+  const declaration = match?.[1].match(new RegExp(`${property}\\s*:\\s*([^;]+)`));
+  return declaration?.[1].trim();
 }
