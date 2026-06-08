@@ -339,9 +339,13 @@ export function PlansPage() {
   const hasUnsavedChanges = currentPlanFingerprint !== savedPlanFingerprint;
   const isReadOnlyDemo = me.data?.is_demo === true;
   const mutationDisabledReason = isReadOnlyDemo ? t('plans.demoReadOnlyTooltip') : undefined;
+  const currentDraftWeek = useMemo(() => {
+    const matchesCurrentWeek = days.length === weekDates.length && days.every((day, index) => day.scheduled_date === weekDates[index]);
+    return matchesCurrentWeek ? { weekStart, days } : null;
+  }, [days, weekDates, weekStart]);
   const longTermWeeks = useMemo(
-    () => buildLongTermWeeks(horizonStart, longTermCalendar.data?.planned_workouts ?? []),
-    [horizonStart, longTermCalendar.data?.planned_workouts],
+    () => buildLongTermWeeks(horizonStart, longTermCalendar.data?.planned_workouts ?? [], currentDraftWeek),
+    [currentDraftWeek, horizonStart, longTermCalendar.data?.planned_workouts],
   );
   const historicalLoadWeeks = Array.isArray(recentLoadWeeks.data) ? recentLoadWeeks.data : [];
 
@@ -1654,7 +1658,7 @@ function overviewFromDays(days: WeekDayPlan[]): PlanningOverview {
   return overviewFromRows(days.flatMap((day) => day.sessions));
 }
 
-function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[]): LongTermWeekPlan[] {
+function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[], draftWeek: { weekStart: string; days: WeekDayPlan[] } | null = null): LongTermWeekPlan[] {
   const workoutsByDate = workouts.reduce<Map<string, PlannedWorkout[]>>((byDate, workout) => {
     const current = byDate.get(workout.scheduled_date) ?? [];
     current.push(workout);
@@ -1663,7 +1667,7 @@ function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[]): Long
   }, new Map());
   return Array.from({ length: LONG_TERM_WEEK_COUNT }, (_, weekIndex) => {
     const weekStart = addDaysToIso(startDate, weekIndex * DAYS_PER_WEEK);
-    const days = Array.from({ length: DAYS_PER_WEEK }, (_, dayIndex) => {
+    const savedDays = Array.from({ length: DAYS_PER_WEEK }, (_, dayIndex) => {
       const scheduledDate = addDaysToIso(weekStart, dayIndex);
       return {
         scheduled_date: scheduledDate,
@@ -1672,6 +1676,7 @@ function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[]): Long
           .map((workout, index) => rowFromWorkout(scheduledDate, workout, index)),
       };
     });
+    const days = draftWeek?.weekStart === weekStart ? draftWeek.days : savedDays;
     return {
       weekStart,
       weekNumber: isoWeekNumber(weekStart),

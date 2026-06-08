@@ -108,6 +108,28 @@ describe('PlansPage', () => {
     confirmSpy.mockRestore();
   });
 
+  test('updates the long-term day tile immediately after editing a day', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([workoutTemplate()]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const dialog = await openLongTermDay('Mon');
+    await userEvent.click(within(dialog).getByRole('button', { name: /Add easy run/i }));
+    await userEvent.click(within(dialog).getByRole('button', { name: /Close day editor/i }));
+
+    const weekRow = await screen.findByTestId(`long-term-week-${weekStartIso()}`);
+    expect(within(weekRow).getByRole('button', { name: /Open Mon, Easy run/i })).toBeInTheDocument();
+    expect(within(weekRow).queryByRole('button', { name: /Open Mon, Unscheduled/i })).not.toBeInTheDocument();
+  });
+
   test('shows favorite templates in day editor quick actions and applies them', async () => {
     const preferenceBodies: unknown[] = [];
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
