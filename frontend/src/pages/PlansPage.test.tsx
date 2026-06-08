@@ -1031,6 +1031,134 @@ describe('PlansPage', () => {
 
     expect((await screen.findAllByText('+100% vs last week')).length).toBeGreaterThan(0);
   });
+
+  test('shows long-term weekly rows with planned day summaries and load outlook', async () => {
+    const currentWeek = weekStartIso();
+    const nextWeek = weekStartIso(addDaysToIso(currentWeek, 7));
+    const nextTuesday = addDaysToIso(nextWeek, 1);
+    const longTermEnd = addDaysToIso(currentWeek, 83);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+        return Promise.resolve(
+          jsonResponse([
+            weeklyMetric(addDaysToIso(currentWeek, -14), 82),
+            weeklyMetric(addDaysToIso(currentWeek, -7), 96),
+          ]),
+        );
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      if (url.includes(`/calendar?start_date=${currentWeek}&end_date=${longTermEnd}`)) {
+        return Promise.resolve(
+          jsonResponse({
+            planned_workouts: [
+              {
+                id: 'future-long',
+                plan_id: null,
+                scheduled_date: nextTuesday,
+                workout_type: 'long',
+                title: 'Long run',
+                target_duration_s: 5400,
+                target_distance_m: 14000,
+                target_intensity: 'easy',
+                instructions: 'Keep it relaxed.',
+                completed_activity_id: null,
+                status: 'planned',
+              },
+            ],
+            activities: [],
+            events: [],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: /Long-term plan/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Planned load outlook/i })).toBeInTheDocument();
+    expect(screen.getByText(/Actual \+ planned/i)).toBeInTheDocument();
+
+    const futureWeekRow = await screen.findByTestId(`long-term-week-${nextWeek}`);
+    expect(within(futureWeekRow).getByText('Long run')).toBeInTheDocument();
+    expect(within(futureWeekRow).getAllByText('14.0 km').length).toBeGreaterThan(0);
+    expect(within(futureWeekRow).getAllByText('1h 30m').length).toBeGreaterThan(0);
+    expect(within(futureWeekRow).getByRole('button', { name: /Open Tue, Long run/i })).toHaveClass('long-term-day-button');
+  });
+
+  test('opens a future long-term day in the day editor and saves that week', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    const currentWeek = weekStartIso();
+    const futureWeek = weekStartIso(addDaysToIso(currentWeek, 14));
+    const futureWednesday = addDaysToIso(futureWeek, 2);
+    const longTermEnd = addDaysToIso(currentWeek, 83);
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (url.includes('/calendar/week') && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+      }
+      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      if (url.includes(`/calendar?start_date=${currentWeek}&end_date=${longTermEnd}`)) {
+        return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient();
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <LanguageProvider initialLocale="en-US">
+          <PlansPage />
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    const futureWeekRow = await screen.findByTestId(`long-term-week-${futureWeek}`);
+    await userEvent.click(within(futureWeekRow).getByRole('button', { name: /Open Wed, Unscheduled/i }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Edit Wed/i });
+    await userEvent.type(within(dialog).getByLabelText(new RegExp(`Title ${futureWednesday} 1`, 'i')), 'Steady aerobic');
+    await userEvent.type(within(dialog).getByLabelText(new RegExp(`Distance km ${futureWednesday} 1`, 'i')), '9');
+    await userEvent.type(within(dialog).getByLabelText(new RegExp(`Time min ${futureWednesday} 1`, 'i')), '50');
+    expect(within(dialog).getByDisplayValue('Steady aerobic')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: /Save week/i })).toBeEnabled());
+    await userEvent.click(screen.getByRole('button', { name: /Save week/i }));
+
+    await waitFor(() => expect(calls.some(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST')).toBe(true));
+    const saveCall = calls.find(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST');
+    const body = JSON.parse(String(saveCall?.[1]?.body));
+    expect(body.week_start_date).toBe(futureWeek);
+    expect(body.workouts[0]).toEqual(
+      expect.objectContaining({
+        scheduled_date: futureWednesday,
+        title: 'Steady aerobic',
+        target_duration_s: 3000,
+        target_distance_m: 9000,
+      }),
+    );
+  });
 });
 
 function jsonResponse(body: unknown) {
@@ -1059,5 +1187,24 @@ function createDataTransfer() {
     dropEffect: 'copy',
     setData: (type: string, value: string) => store.set(type, value),
     getData: (type: string) => store.get(type) ?? '',
+  };
+}
+
+function weeklyMetric(weekStartDate: string, load: number) {
+  return {
+    week_start_date: weekStartDate,
+    distance_m: 30000,
+    moving_time_s: 10800,
+    elevation_gain_m: 250,
+    run_count: 4,
+    load,
+    acute_load: load,
+    chronic_load: load * 4,
+    ramp_ratio: 1,
+    easy_time_s: 7200,
+    moderate_time_s: 2400,
+    hard_time_s: 1200,
+    unknown_time_s: 0,
+    long_run_distance_m: 12000,
   };
 }

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { DragEvent } from 'react';
 import { Archive, ArrowLeft, ArrowRight, Check, ChevronLeft, ChevronRight, Copy, Plus, Star, Trash2, X } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { EmptyState } from '../components/ui/EmptyState';
+import { useRecentWeeklyAnalytics } from '../features/analytics/api';
 import {
   useCalendar,
   useCopyWeekSchedule,
@@ -15,9 +17,9 @@ import {
 import { useMe } from '../features/auth/api';
 import { useUpdateUserPreferences, useUserPreferences } from '../features/profile/api';
 import { addDaysToIso, weekdayLabel, weekStartIso } from '../lib/date';
-import { formatDate, formatDistance, formatDuration, getFormatLocale } from '../lib/format';
+import { formatDate, formatDistance, formatDuration, formatShortDate, getFormatLocale } from '../lib/format';
 import { enumLabel, useTranslation } from '../lib/i18n';
-import type { PlannedWorkout, WorkoutPoolItem, WorkoutTemplate } from '../lib/api/types';
+import type { PlannedWorkout, WeeklyMetric, WorkoutPoolItem, WorkoutTemplate } from '../lib/api/types';
 
 type WeekRow = {
   local_id: string;
@@ -44,6 +46,16 @@ type PlanningOverview = {
   plannedLoad: number;
   sessionCount: number;
 };
+
+type LongTermWeekPlan = {
+  weekStart: string;
+  weekNumber: number;
+  days: WeekDayPlan[];
+  overview: PlanningOverview;
+};
+
+const LONG_TERM_WEEK_COUNT = 12;
+const DAYS_PER_WEEK = 7;
 
 const emptyTemplateForm = {
   name: '',
@@ -240,6 +252,9 @@ export function PlansPage() {
   const workoutPool = useWorkoutPool();
   const calendar = useCalendar(weekStart, weekEnd);
   const previousCalendar = useCalendar(previousWeekStart, previousWeekEnd);
+  const longTermEnd = addDaysToIso(weekStart, LONG_TERM_WEEK_COUNT * DAYS_PER_WEEK - 1);
+  const longTermCalendar = useCalendar(weekStart, longTermEnd);
+  const recentLoadWeeks = useRecentWeeklyAnalytics(6);
   const saveWeek = useSaveWeekSchedule();
   const copyWeek = useCopyWeekSchedule();
   const createTemplate = useCreateWorkoutTemplate();
@@ -255,6 +270,7 @@ export function PlansPage() {
   const [favoriteTemplateIds, setFavoriteTemplateIds] = useState<string[]>([]);
   const [recentTemplateIds, setRecentTemplateIds] = useState<string[]>([]);
   const [selectedSessionLocalId, setSelectedSessionLocalId] = useState<string | null>(null);
+  const [pendingLongTermDate, setPendingLongTermDate] = useState<string | null>(null);
   const [savedPlanFingerprint, setSavedPlanFingerprint] = useState(() => weekPlanFingerprint(planTitle, days));
   const selectedDay = days.find((day) => day.scheduled_date === selectedDate) ?? days[0] ?? emptyDay(selectedDate);
   const selectedSession =
@@ -295,6 +311,11 @@ export function PlansPage() {
     () => overviewFromWorkouts(previousCalendar.data?.planned_workouts ?? []),
     [previousCalendar.data?.planned_workouts],
   );
+  const longTermWeeks = useMemo(
+    () => buildLongTermWeeks(weekStart, longTermCalendar.data?.planned_workouts ?? []),
+    [longTermCalendar.data?.planned_workouts, weekStart],
+  );
+  const historicalLoadWeeks = Array.isArray(recentLoadWeeks.data) ? recentLoadWeeks.data : [];
 
   useEffect(() => {
     const workouts = calendar.data?.planned_workouts ?? [];
@@ -306,12 +327,20 @@ export function PlansPage() {
         .map((workout, index) => rowFromWorkout(date, workout, index)),
     }));
     const loadedTitle = calendar.data?.plan?.title ?? defaultPlanTitle(weekStart, t);
+    const pendingDateReady = Boolean(calendar.data && pendingLongTermDate && weekDates.includes(pendingLongTermDate));
+    const fallbackSelectedDate = weekDates.includes(selectedDate) ? selectedDate : weekDates[0];
+    const nextSelectedDate = pendingDateReady && pendingLongTermDate ? pendingLongTermDate : fallbackSelectedDate;
+    const nextSelectedDay = loadedDays.find((day) => day.scheduled_date === nextSelectedDate) ?? loadedDays[0];
     setDays(loadedDays);
-    setSelectedDate(weekDates[0]);
-    setSelectedSessionLocalId(firstSelectableSessionId(loadedDays[0]));
+    setSelectedDate(nextSelectedDate);
+    setSelectedSessionLocalId(firstSelectableSessionId(nextSelectedDay));
     setPlanTitle(loadedTitle);
     setSavedPlanFingerprint(weekPlanFingerprint(loadedTitle, loadedDays));
-  }, [calendar.data?.plan?.title, calendar.data?.planned_workouts, t, weekDates, weekStart]);
+    if (pendingDateReady) {
+      setDayEditorOpen(true);
+      setPendingLongTermDate(null);
+    }
+  }, [calendar.data, calendar.data?.plan?.title, calendar.data?.planned_workouts, pendingLongTermDate, t, weekDates, weekStart]);
 
   useEffect(() => {
     if (!preferences.data) {
@@ -343,7 +372,7 @@ export function PlansPage() {
           return day;
         }
         const hasSession = day.sessions.some((session) => session.local_id === localId);
-        const baseSessions = hasSession ? day.sessions : [emptySession(date)];
+        const baseSessions = hasSession ? day.sessions : [{ ...emptySession(date), local_id: localId }];
         return {
           ...day,
           sessions: normalizeSessionOrder(
@@ -400,6 +429,11 @@ export function PlansPage() {
     setSelectedDate(date);
     setSelectedSessionLocalId(firstSelectableSessionId(day));
     setDayEditorOpen(true);
+  }
+
+  function openLongTermDay(date: string) {
+    setPendingLongTermDate(date);
+    setWeekStart(weekStartIso(date));
   }
 
   function applyTemplate(date: string, templateId: string) {
@@ -784,6 +818,24 @@ export function PlansPage() {
         />
       </section>
 
+      <section className="planning-long-term-layout">
+        <PlanningLoadOutlookChart historicalWeeks={historicalLoadWeeks} plannedWeeks={longTermWeeks} />
+        <section className="panel long-term-plan-panel" aria-label={t('plans.longTermPlan')}>
+          <div className="panel-heading compact">
+            <div>
+              <p className="eyebrow">{t('plans.longTermPlanEyebrow')}</p>
+              <h2>{t('plans.longTermPlan')}</h2>
+              <small>{t('plans.longTermPlanHelp')}</small>
+            </div>
+          </div>
+          <div className="long-term-week-list">
+            {longTermWeeks.map((week) => (
+              <LongTermWeekRow key={week.weekStart} week={week} onSelectDay={openLongTermDay} />
+            ))}
+          </div>
+        </section>
+      </section>
+
       <section className="planning-board-layout">
         <section className="week-board" aria-label={t('plans.title')}>
           {days.map((day) => (
@@ -951,6 +1003,120 @@ function PlanningMetricCard({
   );
 }
 
+function PlanningLoadOutlookChart({
+  historicalWeeks,
+  plannedWeeks,
+}: {
+  historicalWeeks: WeeklyMetric[];
+  plannedWeeks: LongTermWeekPlan[];
+}) {
+  const { t } = useTranslation();
+  const data = [
+    ...historicalWeeks.map((week) => ({
+      week_start_date: week.week_start_date,
+      actual_load: Math.round(Number(week.load)),
+      planned_load: null,
+    })),
+    ...plannedWeeks.map((week) => ({
+      week_start_date: week.weekStart,
+      actual_load: null,
+      planned_load: Math.round(week.overview.plannedLoad),
+    })),
+  ];
+  return (
+    <div className="chart-box planning-load-outlook">
+      <h2>{t('plans.plannedLoadOutlook')}</h2>
+      <p className="chart-note">{t('plans.loadOutlookHelp')}</p>
+      <div className="chart-legend">
+        <span>
+          <span className="legend-dot" style={{ background: '#2f66d0' }} />
+          {t('plans.actualLoad')}
+        </span>
+        <span>
+          <span className="legend-dot" style={{ background: '#d17b0f' }} />
+          {t('plans.futurePlannedLoad')}
+        </span>
+      </div>
+      <ResponsiveContainer width="100%" height={260}>
+        <BarChart data={data}>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="week_start_date" tickFormatter={(value) => formatShortDate(String(value))} />
+          <YAxis />
+          <Tooltip
+            formatter={(value, name) => [
+              value === null ? t('common.notAvailable') : Math.round(Number(value)),
+              name,
+            ]}
+            labelFormatter={(value) => formatShortDate(String(value))}
+          />
+          <Bar dataKey="actual_load" name={t('plans.actualLoad')} fill="#2f66d0" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="planned_load" name={t('plans.futurePlannedLoad')} fill="#d17b0f" radius={[4, 4, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
+      <small>{t('plans.actualPlannedLoad')}</small>
+    </div>
+  );
+}
+
+function LongTermWeekRow({
+  week,
+  onSelectDay,
+}: {
+  week: LongTermWeekPlan;
+  onSelectDay: (date: string) => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="long-term-week-row" data-testid={`long-term-week-${week.weekStart}`}>
+      <div className="long-term-week-label">
+        <strong>{t('plans.weekNumber', { number: week.weekNumber })}</strong>
+        <small>{formatShortDate(week.weekStart)}</small>
+      </div>
+      <div className="long-term-day-grid">
+        {week.days.map((day) => (
+          <LongTermDayButton key={day.scheduled_date} day={day} onSelect={() => onSelectDay(day.scheduled_date)} />
+        ))}
+      </div>
+      <div className="long-term-week-summary" aria-label={t('plans.weekSummary', { date: formatDate(week.weekStart) })}>
+        <strong>{formatDistance(week.overview.plannedDistanceM)}</strong>
+        <span>{formatDuration(week.overview.plannedTimeS)}</span>
+        <small>{Math.round(week.overview.plannedLoad)} {t('plans.loadShort')}</small>
+      </div>
+    </div>
+  );
+}
+
+function LongTermDayButton({ day, onSelect }: { day: WeekDayPlan; onSelect: () => void }) {
+  const { t } = useTranslation();
+  const state = dayState(day);
+  const visibleSessions = day.sessions.filter(rowHasWorkout);
+  const primarySession = visibleSessions.find((session) => session.workout_type !== 'rest') ?? visibleSessions[0] ?? null;
+  const extraSessionCount = Math.max(0, visibleSessions.length - 1);
+  const summary = primarySession
+    ? primarySession.title || enumLabel(t, 'workout', primarySession.workout_type)
+    : t('plans.unscheduledDay');
+  const detail =
+    primarySession && primarySession.workout_type !== 'rest'
+      ? `${primarySession.target_distance_km ? formatDistance(Number(primarySession.target_distance_km) * 1000) : t('plans.noDistance')} · ${
+          primarySession.target_duration_min ? formatDuration(Number(primarySession.target_duration_min) * 60) : t('plans.noTime')
+        }`
+      : t(state === 'rest' ? 'plans.restDay' : 'plans.noDistance');
+  const typeClass = primarySession ? `type-${primarySession.workout_type}` : 'type-empty';
+  return (
+    <button
+      className={`long-term-day-button ${state} ${typeClass}`}
+      type="button"
+      aria-label={t('plans.openLongTermDay', { date: shortWeekday(day.scheduled_date), summary })}
+      onClick={onSelect}
+    >
+      <span>{shortWeekday(day.scheduled_date)}</span>
+      <strong>{summary}</strong>
+      {extraSessionCount > 0 ? <em>{t('plans.moreSessions', { count: extraSessionCount })}</em> : null}
+      <small>{detail}</small>
+    </button>
+  );
+}
+
 function WeekDayCard({
   day,
   selected,
@@ -1059,7 +1225,8 @@ function DayEditorModal({
   disabledReason?: string;
 }) {
   const { t } = useTranslation();
-  const editableSessions = day.sessions.length > 0 ? day.sessions : [emptySession(day.scheduled_date)];
+  const draftSession = useMemo(() => emptySession(day.scheduled_date), [day.scheduled_date]);
+  const editableSessions = day.sessions.length > 0 ? day.sessions : [draftSession];
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <section
@@ -1424,6 +1591,42 @@ function overviewFromDays(days: WeekDayPlan[]): PlanningOverview {
 
 function overviewFromWorkouts(workouts: PlannedWorkout[]): PlanningOverview {
   return overviewFromRows(workouts.map((workout, index) => rowFromWorkout(workout.scheduled_date, workout, index)));
+}
+
+function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[]): LongTermWeekPlan[] {
+  const workoutsByDate = workouts.reduce<Map<string, PlannedWorkout[]>>((byDate, workout) => {
+    const current = byDate.get(workout.scheduled_date) ?? [];
+    current.push(workout);
+    byDate.set(workout.scheduled_date, current);
+    return byDate;
+  }, new Map());
+  return Array.from({ length: LONG_TERM_WEEK_COUNT }, (_, weekIndex) => {
+    const weekStart = addDaysToIso(startDate, weekIndex * DAYS_PER_WEEK);
+    const days = Array.from({ length: DAYS_PER_WEEK }, (_, dayIndex) => {
+      const scheduledDate = addDaysToIso(weekStart, dayIndex);
+      return {
+        scheduled_date: scheduledDate,
+        sessions: (workoutsByDate.get(scheduledDate) ?? [])
+          .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
+          .map((workout, index) => rowFromWorkout(scheduledDate, workout, index)),
+      };
+    });
+    return {
+      weekStart,
+      weekNumber: isoWeekNumber(weekStart),
+      days,
+      overview: overviewFromDays(days),
+    };
+  });
+}
+
+function isoWeekNumber(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  const target = new Date(Date.UTC(year, month - 1, day));
+  const weekday = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - weekday);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  return Math.ceil(((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
 }
 
 function plannedWorkoutPayloads(days: WeekDayPlan[]) {

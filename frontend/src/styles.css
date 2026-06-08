@@ -3469,6 +3469,177 @@ td a:hover {
   font-size: 13px;
 }
 
+.planning-long-term-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.72fr) minmax(0, 1.28fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.planning-load-outlook {
+  min-width: 0;
+}
+
+.planning-load-outlook > small {
+  display: block;
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.long-term-plan-panel {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+}
+
+.long-term-plan-panel .panel-heading small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.long-term-week-list {
+  display: grid;
+  gap: 8px;
+}
+
+.long-term-week-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr) 124px;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.long-term-week-label,
+.long-term-week-summary {
+  display: grid;
+  align-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-soft);
+}
+
+.long-term-week-label strong,
+.long-term-week-summary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.15;
+}
+
+.long-term-week-label small,
+.long-term-week-summary span,
+.long-term-week-summary small {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 740;
+}
+
+.long-term-week-summary {
+  justify-items: end;
+  text-align: right;
+}
+
+.long-term-day-grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.long-term-day-button {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  min-width: 0;
+  min-height: 82px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.long-term-day-button:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
+}
+
+.long-term-day-button span,
+.long-term-day-button small,
+.long-term-day-button em {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.15;
+}
+
+.long-term-day-button span {
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.long-term-day-button strong {
+  display: -webkit-box;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.18;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+}
+
+.long-term-day-button em {
+  font-style: normal;
+  font-weight: 820;
+}
+
+.long-term-day-button.type-easy,
+.long-term-day-button.type-recovery {
+  border-top-color: var(--green);
+  background: rgba(238, 246, 241, 0.96);
+}
+
+.long-term-day-button.type-long {
+  border-top-color: var(--blue);
+  background: rgba(237, 243, 255, 0.96);
+}
+
+.long-term-day-button.type-tempo,
+.long-term-day-button.type-intervals,
+.long-term-day-button.type-hills {
+  border-top-color: var(--red);
+  background: rgba(255, 244, 244, 0.96);
+}
+
+.long-term-day-button.type-strength {
+  border-top-color: #5d8f3f;
+  background: rgba(240, 246, 238, 0.96);
+}
+
+.long-term-day-button.type-rest,
+.long-term-day-button.rest {
+  border-top-color: var(--amber);
+  background: rgba(255, 248, 234, 0.96);
+}
+
 .planning-board-layout {
   display: grid;
   gap: 16px;
@@ -4440,6 +4611,10 @@ td a:hover {
     grid-template-columns: 1fr;
   }
 
+  .planning-long-term-layout {
+    grid-template-columns: 1fr;
+  }
+
   .template-library,
   .selected-day-editor,
   .sticky-metrics {
@@ -4492,6 +4667,18 @@ td a:hover {
   .landing-proof-list,
   .landing-feature-grid {
     grid-template-columns: 1fr;
+  }
+
+  .long-term-week-row {
+    grid-template-columns: 86px minmax(0, 1fr);
+  }
+
+  .long-term-week-summary {
+    grid-column: 2;
+    grid-template-columns: repeat(3, auto);
+    justify-content: end;
+    align-content: center;
+    gap: 10px;
   }
 
   .landing-proof-list div {
@@ -4778,6 +4965,27 @@ td a:hover {
 
   .week-board {
     grid-template-columns: repeat(7, minmax(132px, 1fr));
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .long-term-week-row {
+    grid-template-columns: 1fr;
+  }
+
+  .long-term-week-label,
+  .long-term-week-summary {
+    grid-template-columns: repeat(2, auto);
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .long-term-week-summary {
+    grid-column: auto;
+  }
+
+  .long-term-day-grid {
+    grid-template-columns: repeat(7, minmax(118px, 1fr));
     overflow-x: auto;
     padding-bottom: 4px;
   }
