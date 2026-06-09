@@ -7,7 +7,9 @@ import { addDaysToIso, weekStartIso } from '../lib/date';
 import { formatShortDate } from '../lib/format';
 import { LanguageProvider } from '../lib/i18n';
 import type { AppLocale } from '../lib/i18n';
-import { PlansPage } from './PlansPage';
+import * as PlansPageModule from './PlansPage';
+
+const { PlansPage } = PlansPageModule;
 
 describe('PlansPage', () => {
   test('saves a week from a selected workout template', async () => {
@@ -687,6 +689,70 @@ describe('PlansPage', () => {
     expect(within(futureWeekRow).getByRole('button', { name: /Open Tue, Long run/i })).toHaveClass('long-term-day-button');
   });
 
+  test('groups actual and planned volume outlook values by the same week start date', () => {
+    type VolumeDatum = {
+      week_start_date: string;
+      actual_distance_km: number | null;
+      planned_distance_km: number | null;
+      actual_time_h: number | null;
+      planned_time_h: number | null;
+    };
+    const buildPlanningVolumeOutlookData = (
+      PlansPageModule as typeof PlansPageModule & {
+        buildPlanningVolumeOutlookData?: (historicalWeeks: unknown[], plannedWeeks: unknown[]) => VolumeDatum[];
+      }
+    ).buildPlanningVolumeOutlookData;
+
+    expect(typeof buildPlanningVolumeOutlookData).toBe('function');
+    if (typeof buildPlanningVolumeOutlookData !== 'function') {
+      return;
+    }
+
+    const sharedWeek = '2026-05-18';
+    const actualOnlyWeek = '2026-05-11';
+    const plannedOnlyWeek = '2026-05-25';
+    const data = buildPlanningVolumeOutlookData(
+      [weeklyMetric(sharedWeek, 80, 18000, 5400), weeklyMetric(actualOnlyWeek, 72, 12000, 3600)],
+      [
+        longTermWeekPlan(sharedWeek, 22000, 7200),
+        longTermWeekPlan(plannedOnlyWeek, 16000, 5400),
+      ],
+    );
+
+    expect(data).toEqual([
+      {
+        week_start_date: actualOnlyWeek,
+        actual_distance_km: 12,
+        planned_distance_km: null,
+        actual_time_h: 1,
+        planned_time_h: null,
+      },
+      {
+        week_start_date: sharedWeek,
+        actual_distance_km: 18,
+        planned_distance_km: 22,
+        actual_time_h: 1.5,
+        planned_time_h: 2,
+      },
+      {
+        week_start_date: plannedOnlyWeek,
+        actual_distance_km: null,
+        planned_distance_km: 16,
+        actual_time_h: null,
+        planned_time_h: 1.5,
+      },
+    ]);
+  });
+
+  test('draws trend lines over each planning volume outlook bar series', () => {
+    const source = readFileSync('src/pages/PlansPage.tsx', 'utf8');
+
+    expect(source).toMatch(/<Line[\s\S]*dataKey="actual_distance_km"/);
+    expect(source).toMatch(/<Line[\s\S]*dataKey="planned_distance_km"/);
+    expect(source).toMatch(/<Line[\s\S]*dataKey="actual_time_h"/);
+    expect(source).toMatch(/<Line[\s\S]*dataKey="planned_time_h"/);
+  });
+
   test('maps rest recovery long run and race plan types to the updated long-term colors', () => {
     const css = readFileSync('src/styles.css', 'utf8');
 
@@ -908,6 +974,20 @@ function weeklyMetric(weekStartDate: string, load: number, distanceM = 30000, mo
     hard_time_s: Math.round(movingTimeS * 0.11),
     unknown_time_s: 0,
     long_run_distance_m: 12000,
+  };
+}
+
+function longTermWeekPlan(weekStart: string, plannedDistanceM: number, plannedTimeS: number) {
+  return {
+    weekStart,
+    weekNumber: 1,
+    days: [],
+    overview: {
+      plannedDistanceM,
+      plannedTimeS,
+      plannedLoad: 0,
+      sessionCount: plannedDistanceM > 0 || plannedTimeS > 0 ? 1 : 0,
+    },
   };
 }
 
