@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Archive, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Copy, Plus, Star, Trash2, X } from 'lucide-react';
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { useRecentWeeklyAnalytics } from '../features/analytics/api';
 import {
   useCalendar,
@@ -56,6 +56,14 @@ type LongTermWeekPlan = {
   weekNumber: number;
   days: WeekDayPlan[];
   overview: PlanningOverview;
+};
+
+type PlanningVolumeOutlookDatum = {
+  week_start_date: string;
+  actual_distance_km: number | null;
+  planned_distance_km: number | null;
+  actual_time_h: number | null;
+  planned_time_h: number | null;
 };
 
 const LONG_TERM_WEEK_COUNT = 12;
@@ -949,22 +957,7 @@ function PlanningVolumeOutlookChart({
   plannedWeeks: LongTermWeekPlan[];
 }) {
   const { t } = useTranslation();
-  const data = [
-    ...historicalWeeks.map((week) => ({
-      week_start_date: week.week_start_date,
-      actual_distance_km: Number(week.distance_m) / 1000,
-      planned_distance_km: null,
-      actual_time_h: Number(week.moving_time_s) / 3600,
-      planned_time_h: null,
-    })),
-    ...plannedWeeks.map((week) => ({
-      week_start_date: week.weekStart,
-      actual_distance_km: null,
-      planned_distance_km: week.overview.plannedDistanceM / 1000,
-      actual_time_h: null,
-      planned_time_h: week.overview.plannedTimeS / 3600,
-    })),
-  ];
+  const data = buildPlanningVolumeOutlookData(historicalWeeks, plannedWeeks);
   return (
     <div className="chart-box planning-volume-outlook">
       <h2>{t('plans.volumeOutlook')}</h2>
@@ -991,7 +984,7 @@ function PlanningVolumeOutlookChart({
         <section className="planning-volume-chart">
           <h3>{t('plans.mileage')}</h3>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data}>
+            <ComposedChart data={data}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="week_start_date" tickFormatter={(value) => formatShortDate(String(value))} />
               <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)} km`} />
@@ -1004,13 +997,29 @@ function PlanningVolumeOutlookChart({
               />
               <Bar dataKey="actual_distance_km" name={t('plans.actualDistance')} fill="#2f66d0" radius={[4, 4, 0, 0]} />
               <Bar dataKey="planned_distance_km" name={t('plans.plannedDistance')} fill="#d17b0f" radius={[4, 4, 0, 0]} />
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="actual_distance_km"
+                name={t('plans.actualDistance')}
+                stroke="#2f66d0"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="planned_distance_km"
+                name={t('plans.plannedDistance')}
+                stroke="#d17b0f"
+                strokeWidth={2}
+                dot={false}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </section>
         <section className="planning-volume-chart">
           <h3>{t('plans.timeChart')}</h3>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={data}>
+            <ComposedChart data={data}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="week_start_date" tickFormatter={(value) => formatShortDate(String(value))} />
               <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)}h`} />
@@ -1023,13 +1032,64 @@ function PlanningVolumeOutlookChart({
               />
               <Bar dataKey="actual_time_h" name={t('plans.actualTime')} fill="#4f8f5f" radius={[4, 4, 0, 0]} />
               <Bar dataKey="planned_time_h" name={t('plans.plannedTime')} fill="#9c6ade" radius={[4, 4, 0, 0]} />
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="actual_time_h"
+                name={t('plans.actualTime')}
+                stroke="#4f8f5f"
+                strokeWidth={2}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="planned_time_h"
+                name={t('plans.plannedTime')}
+                stroke="#9c6ade"
+                strokeWidth={2}
+                dot={false}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         </section>
       </div>
       <small>{t('plans.actualPlannedVolume')}</small>
     </div>
   );
+}
+
+export function buildPlanningVolumeOutlookData(
+  historicalWeeks: WeeklyMetric[],
+  plannedWeeks: LongTermWeekPlan[],
+): PlanningVolumeOutlookDatum[] {
+  const dataByWeek = new Map<string, PlanningVolumeOutlookDatum>();
+  const ensureWeek = (weekStart: string) => {
+    const existing = dataByWeek.get(weekStart);
+    if (existing) {
+      return existing;
+    }
+    const created: PlanningVolumeOutlookDatum = {
+      week_start_date: weekStart,
+      actual_distance_km: null,
+      planned_distance_km: null,
+      actual_time_h: null,
+      planned_time_h: null,
+    };
+    dataByWeek.set(weekStart, created);
+    return created;
+  };
+
+  historicalWeeks.forEach((week) => {
+    const datum = ensureWeek(week.week_start_date);
+    datum.actual_distance_km = Number(week.distance_m) / 1000;
+    datum.actual_time_h = Number(week.moving_time_s) / 3600;
+  });
+  plannedWeeks.forEach((week) => {
+    const datum = ensureWeek(week.weekStart);
+    datum.planned_distance_km = week.overview.plannedDistanceM / 1000;
+    datum.planned_time_h = week.overview.plannedTimeS / 3600;
+  });
+
+  return Array.from(dataByWeek.values()).sort((left, right) => left.week_start_date.localeCompare(right.week_start_date));
 }
 
 function PlanningToolsModal({
