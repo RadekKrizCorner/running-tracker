@@ -8,7 +8,7 @@ Audit pokrývá veřejnou landing page, přihlášení, všechny hlavní chrán�
 
 - Desktop: výchozí viewport vestavěného prohlížeče, 1280 × 720 px.
 - Mobil: 390 × 844 px.
-- Důkazy: aktuální DOM, chování rout, zdrojový kód React/CSS a snímky uložené v `screenshots/`.
+- Důkazy: aktuální DOM, chování rout, zdrojový kód React/CSS a lokálně zkontrolované snímky, které nejsou součástí repozitáře.
 - Omezení: ze snímků a DOM nelze potvrdit úplnou shodu s WCAG. Ještě je nutné samostatně otestovat klávesnici, čtečky obrazovky, kontrast výpočtem, zoom 200–400 %, high-contrast režim a reálná dotyková zařízení.
 
 ## Co aplikace dělá
@@ -52,15 +52,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 1. Veřejná landing page — zdravá
 
-![Landing page](screenshots/01-landing.png)
-
 - Silné: jasná hodnota produktu, kvalitní hero obraz, viditelná cesta k přihlášení, srozumitelné privacy zásady.
 - Rizika: landing page používá samostatný, výrazně marketingovější jazyk než aplikace. Přechod do produktu působí jako přechod mezi dvěma design systémy.
 - Přístupnost: kontrast hero textu je vizuálně dobrý, ale překryv nad fotografií je nutné ověřit výpočtem na celé ploše.
 
 ### 2. Přihlášení — zdravé
-
-![Přihlášení](screenshots/02-login.png)
 
 - Silné: krátký formulář, správný autocomplete, zřetelně oddělené demo bez hesla.
 - Rizika: chybí viditelná cesta zpět na landing page a bližší kontext bezpečnosti/session.
@@ -68,15 +64,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 3. Dashboard se sbalenou navigací — smíšený
 
-![Dashboard se sbalenou navigací](screenshots/03-dashboard.png)
-
 - Silné: data jsou okamžitě dostupná a KPI používají konzistentní komponentu.
 - Rizika: první viewport vyplňuje šest rovnocenných KPI a onboarding. Neexistuje titul stránky ani jedna dominantní odpověď na otázku „co mám dnes dělat?“. Ikony ve sbalené navigaci vyžadují zapamatování významu.
 - Přístupnost: icon-only navigace má aria-labely, ale vizuální uživatel bez tooltipu musí význam odhadovat.
 
 ### 4. Dashboard s rozbalenou navigací — oslabený
-
-![Dashboard s rozbalenou navigací](screenshots/04-dashboard-expanded-nav.png)
 
 - Silné: názvy rout jsou jasné a status dema je viditelný.
 - Rizika: deset rovnocenných položek, logout a karta dne se do výšky 720 px nevejdou. Sidebar má `height: 100vh` a `overflow: hidden`, takže část navigace nebo kontextu mizí podle aktivní routy. Horní brand oblast je stísněná.
@@ -84,15 +76,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 5. Deník aktivit na desktopu — smíšený
 
-![Aktivity](screenshots/05-activities.png)
-
 - Silné: kvalitní filtry, datumové presety, řazení každé metriky, tabulková sémantika.
 - Rizika: devět sloupců soupeří o pozornost a seznam nemá viditelné stránkování ani počet výsledků. Všechny metriky jsou zobrazené stále, ačkoli uživatel obvykle porovnává jen několik.
 - Přístupnost: řazení má názvy tlačítek, ale stav směru musí být oznámen i přes `aria-sort`.
 
 ### 6. Detail aktivity — dobrý základ, vysoká hustota
-
-![Detail aktivity](screenshots/06-activity-detail.png)
 
 - Silné: logická kombinace KPI, mapy a streamů; route a datové grafy jsou největší vizuální důkaz aktivity.
 - Rizika: šest KPI znovu zabírá celý řádek. Mapa a grafy mají stejnou váhu, přestože pro různé typy běhu je důležitost jiná. Další sekce (splity, zóny, poznámky, vybavení) jsou dlouho pod foldem.
@@ -100,15 +88,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 7. Měsíční kalendář na desktopu — slabý
 
-![Kalendář](screenshots/07-calendar.png)
-
 - Silné: plánované a dokončené položky jsou rozlišeny stavem a každý den má otevřitelné detaily.
 - Rizika: šest týdnů je zobrazeno v sedmi úzkých sloupcích bez jmen dnů v horní liště. Karty mají nestejnou výšku a dlouhé názvy se lámou agresivně. Přepínače, datum a navigace jsou rozptýlené do široké hlavičky.
 - Přístupnost: malá tlačítka „Open“ a husté karty mohou být pod doporučenou dotykovou velikostí; význam barevných proužků musí mít redundantní text.
 
 ### 8. Dlouhodobé plánování na desktopu — slabé
-
-![Plánování](screenshots/08-plans.png)
 
 - Silné: zachovává pokročilé funkce, skutečnost vs. plán, drag/edit koncept a souhrn týdne.
 - Rizika: stránka současně zobrazuje navigaci týdne, lock rozsahu, knihovnu šablon, grafy i dvanáct týdnů. Sedm denních karet je tak úzkých, že názvy jsou nečitelné (`Unsc hed...`, `Progr ess...`). Horizontální i vertikální kontext je přetížený.
@@ -116,15 +100,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 9. Seznam závodů — zdravý
 
-![Závody](screenshots/09-events.png)
-
 - Silné: dva cíle jsou snadno porovnatelné, countdown i připravenost jsou dobře čitelné a CTA je viditelné.
 - Rizika: několik vnořených KPI boxů uvnitř velké karty vytváří více rámečků, než obsah potřebuje.
 - Přístupnost: celý card target by měl mít jednoznačný focus a nepřekrývat vnořené odkazy.
 
 ### 10. Detail závodu — informačně přetížený
-
-![Detail závodu](screenshots/10-event-detail.png)
 
 - Silné: transparentní readiness výpočty, cílové tempo, plán do závodu i guidance jsou skutečně užitečné.
 - Rizika: horní KPI a readiness panel opakují countdown a target pace. Dále se opakuje snapshot, guidance a preparation. Uživatel nevidí rozdíl mezi „stavem“, „vysvětlením“ a „akcí“.
@@ -132,15 +112,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 11A. Reporty po načtení — kritický problém
 
-![Automatický skok k preview](screenshots/11-reports.png)
-
 - Pozorované chování: po stabilním načtení se stránka sama posunula přibližně o 2 081 px k tmavému preview iframe. Uživatel nevidí titul, roční statistiky ani kontext editoru.
 - Dopad: první dojem vypadá jako prázdná/rozbitá stránka a klávesa Home ani běžný scroll mimo iframe nevracely konzistentně začátek.
 - Přístupnost: automatické posunutí/focus do iframe je závažné riziko orientace a čtecího pořadí.
 
 ### 11B. Instagram report builder — slabý
-
-![Report builder](screenshots/11-reports-builder.png)
 
 - Silné: funkčně kompletní editor, šablony, týdenní prefill, náhled a export.
 - Rizika: jeden velmi dlouhý formulář obsahuje styl, copy, metriky, story, template management, save/update a export. Neexistují kroky, sticky preview ani jasné oddělení práce s reportem od exportu.
@@ -148,15 +124,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 12. Heatmapa — dobrý základ, slabá priorita mapy
 
-![Heatmapa](screenshots/12-heatmap.png)
-
 - Silné: transparentně uvádí počet běhů, vzorků a buněk; časové filtry jsou srozumitelné.
 - Rizika: KPI a filtry vyplní první viewport, zatímco hlavní důkaz — mapa — začíná až pod foldem. Tři horní metriky z velké části opakují hero badges.
 - Přístupnost: mapa potřebuje textovou alternativu s nejčastějšími lokalitami/oblastmi a plně ovladatelné zoom/pan controls.
 
 ### 13. Route Explorer — smíšený
-
-![Route Explorer](screenshots/13-route-explorer.png)
 
 - Silné: formulář a výsledek jsou na desktopu vedle sebe; self-hosted provoz a stav bez návrhů jsou jasné.
 - Rizika: primární akce „Generate loops“ je pod foldem. Souřadnice jsou exponované dříve než vzdálenost a povrch, přestože jsou pro běžný úkol sekundární. Adresní režim je vizuálně stejně významný jako funkční GPS režimy.
@@ -164,15 +136,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 14. Trendy — analyticky bohaté, bez čtecí cesty
 
-![Trendy](screenshots/14-trends.png)
-
 - Silné: metriky jsou transparentní, používají vhodné sloupce a čáry, důležité hodnoty nejsou jen v tooltipu.
 - Rizika: stránka skládá mnoho rovnocenných grafů za sebe bez globálního období, porovnání, insight headline nebo priorit. Dvojité osy a odlišné palety zvyšují dekódovací náročnost.
 - Přístupnost: tooltip-only detaily musí být dostupné přes focus/tap; každý graf potřebuje stručný textový závěr a datovou tabulku na vyžádání.
 
 ### 15. Nastavení — smíšené
-
-![Nastavení](screenshots/15-settings.png)
 
 - Silné: read-only demo je jasné, privacy copy je konkrétní a citlivé volby jsou popsané.
 - Rizika: vzhled, jazyk, Strava, HR zóny, převýšení a destruktivní privacy operace jsou v jedné dlouhé stránce. Neexistuje lokální navigace ani grouping podle frekvence/rizika.
@@ -180,15 +148,11 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 16. Mobilní dashboard — slabý
 
-![Mobilní dashboard](screenshots/16-dashboard-mobile.png)
-
 - Silné: bottom navigation je snadno dosažitelná palcem a KPI se nelámou.
 - Rizika: šest KPI je změněno na šest plnošířkových karet. Celý první viewport i většina druhého je pouhá metrická stěna, bez názvu stránky, dnešního tréninku nebo akce. Bottom nav částečně překrývá následující obsah.
 - Přístupnost: pevná navigace potřebuje bezpečný spodní inset a obsah musí mít dostatečný padding i při zvětšení textu.
 
 ### 17. Mobilní aktivity — kritické
-
-![Mobilní aktivity](screenshots/17-activities-mobile.png)
 
 - Silné: filtry se skládají čitelně a dotykové chipy mají přiměřenou velikost.
 - Rizika: desktopová devítisloupcová tabulka zůstává tabulkou a je horizontálně oříznutá. Není viditelný indikátor horizontálního scrollu ani možnost volby sloupců. Uživatel vidí neúplné hodnoty a pravá část se schovává pod viewport.
@@ -196,23 +160,17 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 
 ### 18. Mobilní kalendář — slabý
 
-![Mobilní kalendář](screenshots/18-calendar-mobile.png)
-
 - Silné: denní karty jsou čitelné a zachovávají stavy.
 - Rizika: měsíční režim se mění na seznam 42 velkých dní, včetně prázdných. Navigace „Previous / rozsah / Next“ zabírá mnoho vertikálního prostoru a nevysvětluje, že rozsah je šest týdnů.
 - Přístupnost: prázdné dny tvoří dlouhou sérii focusovatelných tlačítek bez vysoké informační hodnoty.
 
 ### 19. Mobilní plánování — smíšené
 
-![Mobilní plánování](screenshots/19-plans-mobile.png)
-
 - Silné: controls se skládají bez horizontálního přetečení a graf je čitelný.
 - Rizika: název týdne, datum, lock range, knihovna a save soutěží o první polovinu viewportu. Dlouhodobý plán je až po dvou grafech a dvanáct týdnů vytváří extrémně dlouhou stránku.
 - Přístupnost: sticky save/status a oddělený edit day drawer by snížily ztrátu kontextu při klávesnici i dotyku.
 
 ### 20. Mobilní sekundární navigace — dobrý základ
-
-![Mobilní More menu](screenshots/20-mobile-more-navigation.png)
 
 - Silné: všechny sekundární routy mají velké a jasné targets; panel je obsahově jednoduchý.
 - Rizika: šest sekundárních sekcí plus logout potvrzuje, že informační architektura je příliš plochá. Chybí viditelné zavírací tlačítko a panel zakrývá bottom nav i obsah.
@@ -248,4 +206,3 @@ Running Tracker je osobní single-owner tréninková aplikace, která pokrývá 
 - Nebyly provedeny mutace v owner účtu, Strava OAuth ani destruktivní privacy akce.
 - Nebyla hodnocena rychlost na pomalé síti ani velmi velké datové objemy.
 - Nebyla ověřena funkce ve skutečné čtečce obrazovky nebo na fyzickém telefonu.
-

@@ -4,16 +4,7 @@ Datum: 2026-06-28
 
 ## Porovnávané podklady
 
-- Zdrojové mocky:
-  - `docs/ui-refactor-mockups-2026-06-28/01-dashboard-desktop.png`
-  - `docs/ui-refactor-mockups-2026-06-28/02-planning-desktop.png`
-  - `docs/ui-refactor-mockups-2026-06-28/03-dashboard-mobile.png`
-  - `docs/ui-refactor-mockups-2026-06-28/04-activities-mobile.png`
-- Implementační snímky:
-  - `docs/ui-refactor-implementation/final/dashboard-desktop.png`
-  - `docs/ui-refactor-implementation/final/planning-desktop-drawer.png`
-  - `docs/ui-refactor-implementation/final/dashboard-mobile.png`
-  - `docs/ui-refactor-implementation/final/activities-mobile.png`
+- Schválené referenční mocky a finální implementační snímky byly porovnány lokálně a nejsou součástí repozitáře ani Pull Requestu.
 - Desktop viewport: 1440 × 1024, otevřený editor dne u plánování.
 - Mobilní viewport: 390 × 844, dashboard a activities se zobrazenou spodní navigací.
 
@@ -58,7 +49,7 @@ Datum: 2026-06-28
 ## Copy diff oproti mockům
 
 - Číselné hodnoty, názvy běhů a eventů odpovídají živým demo datům, ne statickým hodnotám v mocku.
-- Finální dashboard frame ukazuje pravdivý stav „No run is planned for today“, protože první budoucí workout je 2026-06-29; vizuální mock zobrazuje alternativní stav s dnešním plánem.
+- Ověřený dashboard ukazuje pravdivý stav „No run is planned for today“, protože první budoucí workout je 2026-06-29; referenční stav zobrazoval alternativu s dnešním plánem.
 - Sidebar ponechává existující produktový label „Dashboard“, zatímco mobilní navigace používá „Today“.
 - „Start Workout“ ani obdobná akce není implementována; podle produktového rozhodnutí přichází dokončené aktivity výhradně z integrací, například Stravy.
 - Editor plánování používá existující podrobnější copy a ovládání, aby nebyla ztracena žádná funkce.
