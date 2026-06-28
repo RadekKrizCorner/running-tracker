@@ -19,6 +19,15 @@ describe('CalendarPage', () => {
     expect(styles).not.toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s*\{\s*display:\s*none;/,
     );
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s*\{[^}]*grid-template-columns:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\);/,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s+\.calendar-day-cell\s*\{[^}]*min-height:\s*56px;/,
+    );
+    expect(styles).toMatch(
+      /\.calendar-board\.month\s+\.calendar-day-cell:has\(\.calendar-open-day:focus-visible\)\s*\{[^}]*outline:/,
+    );
   });
 
   test('renders planned workouts, completed activities, and custom events', async () => {

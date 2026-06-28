@@ -13,7 +13,9 @@ Refaktor nahrazuje původní vizuální vrstvu systémem Training Brief napří�
 - Všechny původní hlavní routy zůstaly zachované.
 - Dashboard staví na datech z dashboard API a transparentně rozlišuje planned, completed a synced data.
 - Dnešní headline vybírá pouze workout se `scheduled_date` odpovídajícím dnešnímu datu v časové zóně vlastníka; budoucí workout ani workout z vedlejšího UTC dne už není prezentován jako dnešní.
+- Stejnou owner-local definici dne používá desktopová Today karta; zrušené workouty jsou vyřazené z dashboardových listů, agendy i plánovaných agregací.
 - Activities používají na desktopu tabulku a na mobilu přehledný seznam nad stejnými daty a filtry.
+- Mobilní měsíční kalendář zachovává celý měsíc v kompaktním sedmisloupcovém gridu a otevírá detail přes celou plochu dne.
 - Planning zachovává týden, outlook, knihovnu, editor dne, šablony, přesuny, více session i read-only demo stav.
 - UI neobsahuje ruční „Start Workout“ ani ruční dokončování; dokončené aktivity zůstávají integrační data.
 
@@ -41,11 +43,11 @@ Refaktor nahrazuje původní vizuální vrstvu systémem Training Brief napří�
 
 ## Verifikace
 
-- Frontend testy: 23 souborů, 165 testů včetně regresního pokrytí owner-local timezone rolloveru v plánování i dashboardovém Today, zrušeného dnešního workoutu, zarovnaných plánovacích rozsahů, přístupného přesunu mezi týdny, mobilního řazení a lazy Outlook dotazů.
+- Frontend testy: 23 souborů, 166 testů včetně regresního pokrytí owner-local timezone rolloveru v plánování, dashboardovém Today i shell kartě, zrušeného dnešního workoutu, zarovnaných plánovacích rozsahů, přístupného přesunu mezi týdny, mobilního řazení a lazy Outlook dotazů.
 - Frontend production build: TypeScript a Vite build bez chyby.
-- Backend testy: 176 testů bez failure při explicitně produkčně bezpečných testovacích overrides (`DEMO_ACCOUNT_ENABLED=false`, `ROUTING_ENABLED=false`, `ROUTING_PROVIDER=valhalla`).
+- Backend testy: 177 testů bez failure při explicitně produkčně bezpečných testovacích overrides (`DEMO_ACCOUNT_ENABLED=false`, `ROUTING_ENABLED=false`, `ROUTING_PROVIDER=valhalla`), včetně vyloučení cancelled workoutů ze všech dashboardových agregací.
 - `git diff --check`: bez whitespace chyb.
-- Browser QA: 10 desktop rout a 6 mobilních rout, bez overflow; 0 console errors/warnings.
+- Browser QA: 10 desktop rout a 6 mobilních rout bez overflow; mobilní month calendar má při 390 px 42 buněk v 7 sloupcích, výšku gridu 343 px a nulový horizontální overflow; 0 console errors/warnings.
 
 ## Hodnocení
 

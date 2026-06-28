@@ -136,7 +136,11 @@ def dashboard_payload(session: Session, user_id: UUID, period: str, selected_wee
     upcoming = list(
         session.scalars(
             select(PlannedWorkout)
-            .where(PlannedWorkout.user_id == user_id, PlannedWorkout.scheduled_date >= current_local_date)
+            .where(
+                PlannedWorkout.user_id == user_id,
+                PlannedWorkout.scheduled_date >= current_local_date,
+                PlannedWorkout.status != "cancelled",
+            )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
             .limit(8)
         )
@@ -626,6 +630,7 @@ def _week_plan_comparison(
                 PlannedWorkout.user_id == user_id,
                 PlannedWorkout.scheduled_date >= week_start_date,
                 PlannedWorkout.scheduled_date <= week_end_date,
+                PlannedWorkout.status != "cancelled",
             )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
         )

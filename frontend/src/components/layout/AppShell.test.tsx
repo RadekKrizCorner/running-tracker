@@ -8,6 +8,33 @@ import { toIsoDate } from '../../lib/date';
 import { AppShell } from './AppShell';
 
 describe('AppShell', () => {
+  test('requests the owner-local day for the desktop Today card', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-28T11:30:00Z'));
+    try {
+      const fetchMock = vi.fn((url: string) => Promise.resolve(jsonResponse(responseForAppShellUrl(url))));
+      vi.stubGlobal('fetch', fetchMock);
+
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter initialEntries={['/dashboard']}>
+            <AppShell user={{ id: 'u1', email: 'owner@example.com', display_name: null, timezone: 'Pacific/Kiritimati', units: 'metric' }}>
+              <div>Page content</div>
+            </AppShell>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      const calendarRequest = fetchMock.mock.calls
+        .map(([url]) => url)
+        .find((url) => url.includes('/calendar'));
+      expect(calendarRequest).toContain('start_date=2026-06-29');
+      expect(calendarRequest).toContain('end_date=2026-06-29');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('groups desktop navigation and exposes the five approved mobile destinations', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(jsonResponse(responseForAppShellUrl(url)))));
 

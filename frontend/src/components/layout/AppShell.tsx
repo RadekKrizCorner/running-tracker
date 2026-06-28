@@ -23,7 +23,7 @@ import { useCalendar } from '../../features/plans/api';
 import { AVATAR_ICONS, avatarIconById } from '../../features/profile/avatarIcons';
 import { useUpdateUserPreferences, useUserPreferences } from '../../features/profile/api';
 import type { CalendarResponse, PlannedWorkout, User } from '../../lib/api/types';
-import { toIsoDate } from '../../lib/date';
+import { todayIso } from '../../lib/date';
 import { formatDuration } from '../../lib/format';
 import { enumLabel, useTranslation } from '../../lib/i18n';
 import { mobileMoreItems, mobilePrimaryItems, navigationGroups } from './navigation';
@@ -56,7 +56,7 @@ export function AppShell({ user, children }: AppShellProps) {
   const markNotificationRead = useMarkNotificationRead();
   const markAllNotificationsRead = useMarkAllNotificationsRead();
   const deleteNotification = useDeleteNotification();
-  const [today, setToday] = useState(() => toIsoDate(new Date()));
+  const [today, setToday] = useState(() => todayIso(user?.timezone));
   const todayCalendar = useCalendar(today, today);
   const todayCard = useMemo(
     () => buildTodayCard(todayCalendar.data, today, todayCalendar.isLoading, t),
@@ -115,9 +115,11 @@ export function AppShell({ user, children }: AppShellProps) {
   }, [notificationsOpen]);
 
   useEffect(() => {
-    const intervalId = window.setInterval(() => setToday(toIsoDate(new Date())), 60_000);
+    const refreshToday = () => setToday(todayIso(user?.timezone));
+    refreshToday();
+    const intervalId = window.setInterval(refreshToday, 60_000);
     return () => window.clearInterval(intervalId);
-  }, []);
+  }, [user?.timezone]);
 
   useEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });

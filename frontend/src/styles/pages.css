@@ -383,7 +383,50 @@
 
   .calendar-board.month {
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .calendar-board.month .calendar-day-cell {
+    position: relative;
+    min-height: 56px;
+    padding: 7px 4px;
+    gap: 3px;
+  }
+
+  .calendar-board.month .calendar-day-cell header {
+    justify-content: flex-start;
+  }
+
+  .calendar-board.month .calendar-day-cell header span {
+    font-size: 0.68rem;
+  }
+
+  .calendar-board.month .calendar-open-day {
+    position: absolute;
+    z-index: 1;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+  }
+
+  .calendar-board.month .calendar-day-cell:has(.calendar-open-day:focus-visible) {
+    outline: 3px solid var(--focus);
+    outline-offset: -3px;
+  }
+
+  .calendar-board.month .calendar-day-summary,
+  .calendar-board.month .calendar-day-items {
+    display: none;
+  }
+
+  .calendar-board.month .calendar-day-cell.has-items::after {
+    width: 5px;
+    height: 5px;
+    margin: 1px auto 0;
+    border-radius: 50%;
+    background: var(--green);
+    content: '';
   }
 
   .calendar-board.week {
