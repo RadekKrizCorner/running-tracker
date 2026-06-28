@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { addDaysToIso, toIsoDate } from '../lib/date';
@@ -79,6 +80,17 @@ describe('ActivitiesPage', () => {
       expect(lastFetchUrl(fetchMock)).toContain('start_date=2026-01-01');
       expect(lastFetchUrl(fetchMock)).toContain('end_date=2026-01-31');
     });
+  });
+
+  test('keeps custom date controls available in the mobile layout', () => {
+    const styles = readFileSync('src/styles/layout.css', 'utf8');
+
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.activity-custom-range\s*\{[\s\S]*?display:\s*grid;/,
+    );
+    expect(styles).not.toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.activity-custom-range\s*\{\s*display:\s*none;/,
+    );
   });
 });
 

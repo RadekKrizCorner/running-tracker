@@ -35,6 +35,7 @@ type AppShellProps = {
 
 const AVATAR_IMAGE_MAX_BYTES = 1_500_000;
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'running-tracker.sidebar-collapsed';
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export function AppShell({ user, children }: AppShellProps) {
   const { setLocale, t } = useTranslation();
@@ -71,6 +72,8 @@ export function AppShell({ user, children }: AppShellProps) {
   const isDemo = Boolean(user?.is_demo);
   const notificationButtonRef = useRef<HTMLButtonElement | null>(null);
   const notificationPopoverRef = useRef<HTMLDivElement | null>(null);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const morePanelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (preferences.data?.locale) {
@@ -128,6 +131,52 @@ export function AppShell({ user, children }: AppShellProps) {
     setSelectedAvatarImage(preferences.data?.avatar_image_data_url ?? null);
     setAvatarStatus(null);
   }, [avatarOpen, preferences.data?.avatar_icon, preferences.data?.avatar_image_data_url]);
+
+  useEffect(() => {
+    if (!moreOpen) {
+      return;
+    }
+    const panel = morePanelRef.current;
+    const trigger = moreButtonRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const focusableElements = () => Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+    focusableElements()[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMoreOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') {
+        return;
+      }
+      const focusable = focusableElements();
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) {
+        event.preventDefault();
+        panel.focus();
+        return;
+      }
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      trigger?.focus();
+    };
+  }, [moreOpen]);
 
   const saveAvatar = () => {
     updatePreferences.mutate(
@@ -298,8 +347,10 @@ export function AppShell({ user, children }: AppShellProps) {
           );
         })}
         <button
+          ref={moreButtonRef}
           className={moreActive || moreOpen ? 'bottom-nav-link active' : 'bottom-nav-link'}
           type="button"
+          aria-controls="mobile-more-navigation"
           aria-expanded={moreOpen}
           onClick={() => setMoreOpen((current) => !current)}
         >
@@ -308,8 +359,29 @@ export function AppShell({ user, children }: AppShellProps) {
         </button>
       </nav>
       {moreOpen ? (
-        <div className="mobile-more-sheet">
-          <div aria-label={t('nav.moreNavigation')} className="mobile-more-panel" role="dialog">
+        <div
+          className="mobile-more-sheet"
+          onPointerDown={(event) => {
+            if (event.target === event.currentTarget) {
+              setMoreOpen(false);
+            }
+          }}
+        >
+          <div
+            ref={morePanelRef}
+            id="mobile-more-navigation"
+            aria-label={t('nav.moreNavigation')}
+            aria-modal="true"
+            className="mobile-more-panel"
+            role="dialog"
+            tabIndex={-1}
+          >
+            <div className="mobile-more-header">
+              <strong>{t('nav.more')}</strong>
+              <button className="icon-button" type="button" aria-label={t('common.close')} onClick={() => setMoreOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
             {mobileMoreItems.map((item) => {
               const Icon = item.icon;
               return (

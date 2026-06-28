@@ -184,6 +184,11 @@ describe('AppShell', () => {
     await userEvent.click(screen.getByRole('button', { name: /Více/i }));
 
     const moreMenu = screen.getByRole('dialog', { name: /Další navigace/i });
+    const moreTrigger = screen.getByRole('button', { name: /Více/i });
+    expect(moreMenu).toHaveAttribute('aria-modal', 'true');
+    expect(moreMenu).toHaveAttribute('id');
+    expect(moreTrigger).toHaveAttribute('aria-controls', moreMenu.id);
+    expect(moreMenu).toContainElement(document.activeElement as HTMLElement | null);
     expect(within(moreMenu).getByRole('link', { name: /Události/i })).toBeInTheDocument();
     expect(within(moreMenu).getByRole('link', { name: /Reporty/i })).toBeInTheDocument();
     expect(within(moreMenu).getByRole('link', { name: /Kalendář/i })).toBeInTheDocument();
@@ -191,7 +196,36 @@ describe('AppShell', () => {
     expect(within(moreMenu).queryByRole('link', { name: /Vybavení/i })).not.toBeInTheDocument();
     expect(within(moreMenu).getByRole('link', { name: /Nastavení/i })).toBeInTheDocument();
     expect(within(moreMenu).getByRole('button', { name: /Odhlásit/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Více/i })).toHaveClass('active');
+    expect(moreTrigger).toHaveClass('active');
+
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: /Další navigace/i })).not.toBeInTheDocument();
+    expect(moreTrigger).toHaveFocus();
+  });
+
+  test('keeps keyboard focus inside the mobile more dialog', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(jsonResponse(responseForAppShellUrl(url)))));
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <AppShell user={{ id: 'u1', email: 'owner@example.com', display_name: null, timezone: 'Europe/Prague', units: 'metric' }}>
+            <div>Page content</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Více/i }));
+    const moreMenu = screen.getByRole('dialog', { name: /Další navigace/i });
+    const closeButton = within(moreMenu).getByRole('button', { name: /Zavřít/i });
+    const logoutButton = within(moreMenu).getByRole('button', { name: /Odhlásit/i });
+
+    expect(closeButton).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(logoutButton).toHaveFocus();
+    await userEvent.tab();
+    expect(closeButton).toHaveFocus();
   });
 
   test('scrolls to the top after changing pages', async () => {

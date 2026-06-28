@@ -168,20 +168,34 @@
 }
 
 .dashboard-secondary-metrics {
-  display: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--border);
 }
 
 .dashboard-page > .today-brief { order: 0; }
-.dashboard-page > .chart-grid { order: 1; }
-.dashboard-page > .split-grid { order: 2; }
-.dashboard-page > .week-plan-panel { order: 3; }
+.dashboard-page > .dashboard-secondary-metrics { order: 1; }
+.dashboard-page > .chart-grid { order: 2; }
+.dashboard-page > .split-grid { order: 3; }
+.dashboard-page > .week-plan-panel { order: 4; }
 .dashboard-page > .empty-state,
 .dashboard-page > .header-actions,
 .dashboard-page > .sync-banner,
 .dashboard-page > .onboarding-checklist,
 .dashboard-page > .plan-overview,
 .dashboard-page > .analytics-glossary,
-.dashboard-page > .insight-strip { order: 4; }
+.dashboard-page > .insight-strip { order: 5; }
+
+.dashboard-secondary-metrics .metric-card {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+}
 
 .dashboard-page > .chart-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -192,7 +206,7 @@
 }
 
 .dashboard-page > .chart-grid > :nth-child(3) {
-  display: none;
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 760px) {
@@ -243,7 +257,7 @@
   }
 
   .dashboard-secondary-metrics {
-    display: none;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .today-week-agenda {
@@ -251,6 +265,11 @@
   }
 
   .dashboard-page > .chart-grid {
-    display: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dashboard-page > .chart-grid > :nth-child(3) {
+    grid-column: auto;
   }
 }

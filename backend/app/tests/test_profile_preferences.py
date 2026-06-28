@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
+
+from app.core.time import week_start
 from app.tests.conftest import setup_and_login
 
 
@@ -74,6 +77,24 @@ def test_owner_preferences_store_planning_week_start(client) -> None:
 
     assert reset.status_code == 200
     assert reset.json()["planning_week_start_date"] is None
+
+
+def test_owner_preferences_reject_planning_ranges_outside_supported_history(client) -> None:
+    """Verify planning range starts stay within the supported history window."""
+    setup_and_login(client)
+    current_week = week_start(date.today())
+
+    future = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": (current_week + timedelta(days=7)).isoformat()},
+    )
+    too_old = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": (current_week - timedelta(weeks=105)).isoformat()},
+    )
+
+    assert future.status_code == 422
+    assert too_old.status_code == 422
 
 
 def test_owner_preferences_persist_avatar_choice(client) -> None:

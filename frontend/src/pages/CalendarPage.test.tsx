@@ -1,12 +1,24 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { addDaysToIso, weekStartIso } from '../lib/date';
 import { LanguageProvider } from '../lib/i18n';
 import { CalendarPage } from './CalendarPage';
 
 describe('CalendarPage', () => {
+  test('keeps the default month board visible at the mobile breakpoint', () => {
+    const styles = readFileSync('src/styles/pages.css', 'utf8');
+
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s*\{[\s\S]*?display:\s*grid;/,
+    );
+    expect(styles).not.toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s*\{\s*display:\s*none;/,
+    );
+  });
+
   test('renders planned workouts, completed activities, and custom events', async () => {
     const weekStart = weekStartIso();
     const workoutDate = addDaysToIso(weekStart, 1);

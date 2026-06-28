@@ -41,9 +41,9 @@ Refaktor nahrazuje původní vizuální vrstvu systémem Training Brief napří�
 
 ## Verifikace
 
-- Frontend testy: 22 souborů, 152 testů po přidaném regresním testu.
+- Frontend testy: 22 souborů, 157 testů včetně regresního pokrytí oprav po Staff Engineer review.
 - Frontend production build: TypeScript a Vite build bez chyby.
-- Backend testy: 174 testů bez failure při explicitně produkčně bezpečných testovacích overrides (`DEMO_ACCOUNT_ENABLED=false`, `ROUTING_ENABLED=false`, `ROUTING_PROVIDER=valhalla`).
+- Backend testy: 175 testů bez failure při explicitně produkčně bezpečných testovacích overrides (`DEMO_ACCOUNT_ENABLED=false`, `ROUTING_ENABLED=false`, `ROUTING_PROVIDER=valhalla`).
 - `git diff --check`: bez whitespace chyb.
 - Browser QA: 10 desktop rout a 6 mobilních rout, bez overflow; 0 console errors/warnings.
 

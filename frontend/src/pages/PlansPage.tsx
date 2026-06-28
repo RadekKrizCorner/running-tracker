@@ -95,6 +95,8 @@ type PlanningGapValueKey = 'actual_distance_km' | 'planned_distance_km' | 'actua
 
 const LONG_TERM_WEEK_COUNT = 12;
 const PLANNING_OUTLOOK_PAST_WEEK_COUNT = 4;
+const MAX_PLANNING_HISTORY_WEEKS = 104;
+const MAX_PLANNING_OUTLOOK_WEEK_COUNT = MAX_PLANNING_HISTORY_WEEKS + LONG_TERM_WEEK_COUNT;
 const DAYS_PER_WEEK = 7;
 const PLANNING_DISTANCE_GAP_IDS = {
   clip: 'planning-distance-gap-clip',
@@ -339,6 +341,13 @@ export function PlansPage() {
   const [planRangeStartInput, setPlanRangeStartInput] = useState(weekStartIso());
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDaysToIso(weekStart, index)), [weekStart]);
   const weekEnd = weekDates[6];
+  const currentWeekStart = weekStartIso();
+  const planningRangeMin = addDaysToIso(currentWeekStart, -MAX_PLANNING_HISTORY_WEEKS * DAYS_PER_WEEK);
+  const planningRangeMax = currentWeekStart;
+  const normalizedPlanRangeInput = normalizePlanningRangeStart(planRangeStartInput, horizonStart);
+  const planRangeInputValid = /^\d{4}-\d{2}-\d{2}$/.test(planRangeStartInput)
+    && normalizedPlanRangeInput >= planningRangeMin
+    && normalizedPlanRangeInput <= planningRangeMax;
   const planTitle = useMemo(() => defaultPlanTitle(weekStart, t), [t, weekStart]);
   const templates = useWorkoutTemplates();
   const preferences = useUserPreferences();
@@ -352,9 +361,14 @@ export function PlansPage() {
     ? weekStartIso(preferences.data.planning_week_start_date)
     : null;
   const planningPreferencesResolved = preferences.isSuccess || preferences.isError;
-  const planningOutlookRangeStart = lockedPlanStart ?? plannedOutlookStart;
+  const requestedPlanningOutlookRangeStart = lockedPlanStart ?? plannedOutlookStart;
+  const earliestBoundedOutlookStart = addDaysToIso(longTermEnd, -(MAX_PLANNING_OUTLOOK_WEEK_COUNT - 1) * DAYS_PER_WEEK);
+  const planningOutlookRangeStart = requestedPlanningOutlookRangeStart < earliestBoundedOutlookStart
+    ? earliestBoundedOutlookStart
+    : requestedPlanningOutlookRangeStart;
   const planningOutlookWeekCount = weekCountInclusive(planningOutlookRangeStart, longTermEnd);
-  const longTermCalendar = useCalendar(planningOutlookRangeStart, longTermEnd, planningPreferencesResolved);
+  const longTermCalendar = useCalendar(horizonStart, longTermEnd);
+  const planningOutlookCalendar = useCalendar(planningOutlookRangeStart, longTermEnd, planningPreferencesResolved);
   const recentLoadWeeks = useRecentWeeklyAnalytics(6, planningPreferencesResolved && lockedPlanStart === null);
   const lockedLoadWeeks = useWeeklyAnalyticsRange(lockedPlanStart, longTermEnd, lockedPlanStart !== null);
   const saveWeek = useSaveWeekSchedule();
@@ -453,11 +467,11 @@ export function PlansPage() {
     () =>
       buildLongTermWeeks(
         planningOutlookRangeStart,
-        longTermCalendar.data?.planned_workouts ?? [],
+        planningOutlookCalendar.data?.planned_workouts ?? [],
         dirtyWeekDrafts,
         planningOutlookWeekCount,
       ),
-    [dirtyWeekDrafts, longTermCalendar.data?.planned_workouts, planningOutlookRangeStart, planningOutlookWeekCount],
+    [dirtyWeekDrafts, planningOutlookCalendar.data?.planned_workouts, planningOutlookRangeStart, planningOutlookWeekCount],
   );
   const activeLoadWeeks = lockedPlanStart ? lockedLoadWeeks.data : recentLoadWeeks.data;
   const historicalLoadWeeks = Array.isArray(activeLoadWeeks) ? activeLoadWeeks : [];
@@ -623,12 +637,11 @@ export function PlansPage() {
   }
 
   function lockPlanningRange() {
-    if (isReadOnlyDemo) {
+    if (isReadOnlyDemo || !planRangeInputValid) {
       return;
     }
-    const nextWeekStart = normalizePlanningRangeStart(planRangeStartInput, horizonStart);
-    setPlanRangeStartInput(nextWeekStart);
-    updatePreferences.mutate({ planning_week_start_date: nextWeekStart });
+    setPlanRangeStartInput(normalizedPlanRangeInput);
+    updatePreferences.mutate({ planning_week_start_date: normalizedPlanRangeInput });
   }
 
   function resetPlanningRange() {
@@ -1011,7 +1024,10 @@ export function PlansPage() {
               <span>{t('plans.planRangeStart')}</span>
               <input
                 aria-label={t('plans.planRangeStart')}
+                aria-invalid={!planRangeInputValid}
                 disabled={isReadOnlyDemo}
+                min={planningRangeMin}
+                max={planningRangeMax}
                 type="date"
                 value={planRangeStartInput}
                 onChange={(event) => setPlanRangeStartInput(event.target.value)}
@@ -1021,7 +1037,7 @@ export function PlansPage() {
               className="secondary-button compact"
               type="button"
               onClick={lockPlanningRange}
-              disabled={isReadOnlyDemo || updatePreferences.isPending}
+              disabled={isReadOnlyDemo || updatePreferences.isPending || !planRangeInputValid}
               title={mutationDisabledReason}
             >
               <Lock size={14} />
@@ -1044,6 +1060,11 @@ export function PlansPage() {
                 ? t('plans.planRangeLocked', { date: formatShortDate(lockedPlanStart) })
                 : t('plans.planRangeUnlocked')}
             </small>
+            {!planRangeInputValid ? (
+              <small className="form-error" role="alert">
+                {t('plans.planRangeInvalid', { min: formatShortDate(planningRangeMin), max: formatShortDate(planningRangeMax) })}
+              </small>
+            ) : null}
           </div>
           <button className="secondary-button" type="button" onClick={() => setTemplateLibraryOpen(true)}>
             <Archive size={16} />

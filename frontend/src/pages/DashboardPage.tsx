@@ -26,7 +26,8 @@ export function DashboardPage() {
   const { t } = useTranslation();
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
   const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(null);
-  const dashboard = useDashboard('week', selectedWeekStart ?? undefined);
+  const dashboard = useDashboard('week');
+  const selectedWeekDashboard = useDashboard('week', selectedWeekStart ?? undefined);
   const strava = useStravaStatus();
   const hrZones = useHeartRateZones();
   const preferences = useUserPreferences();
@@ -45,27 +46,23 @@ export function DashboardPage() {
     }
   }, [strava.data?.active_job_id]);
 
-  if (dashboard.isLoading || strava.isLoading || preferences.isLoading) {
+  if (dashboard.isLoading || selectedWeekDashboard.isLoading || strava.isLoading || preferences.isLoading) {
     return <div className="screen-center">{t('common.loadingDashboard')}</div>;
   }
 
   const data = dashboard.data;
+  const selectedWeekPlan = selectedWeekDashboard.data?.week_plan ?? data?.week_plan;
   const noActivities = !data || data.recent_activities.length === 0;
 
   return (
     <div className="page-stack dashboard-page">
       <TodayBrief data={data} />
 
-      <section className="metric-grid dashboard-secondary-metrics">
-        <MetricCard label={t('common.distance')} value={formatDistance(data?.this_week.distance_m)} detail={t('dashboard.thisWeek')} />
+      <section className="metric-grid dashboard-secondary-metrics" aria-label={t('dashboard.supportingMetrics')}>
         <MetricCard label={t('dashboard.movingTime')} value={formatDuration(data?.this_week.moving_time_s)} detail={t('dashboard.thisWeek')} />
-        <MetricCard label={t('dashboard.runs')} value={`${data?.this_week.run_count ?? 0}`} detail={t('common.completed')} />
         <MetricCard label={t('dashboard.longestRun')} value={formatDistance(data?.this_week.longest_run_m)} detail={t('dashboard.thisWeek')} />
         {dashboardMode === 'advanced' ? (
-          <>
-            <MetricCard label={t('common.load')} value={`${Math.round(data?.this_week.load ?? 0)}`} detail={t('dashboard.transparentEstimate')} />
-            <MetricCard label={t('common.elevation')} value={`${Math.round(data?.this_week.elevation_gain_m ?? 0)} m`} detail={t('dashboard.gain')} />
-          </>
+          <MetricCard label={t('common.elevation')} value={`${Math.round(data?.this_week.elevation_gain_m ?? 0)} m`} detail={t('dashboard.gain')} />
         ) : null}
       </section>
 
@@ -147,13 +144,13 @@ export function DashboardPage() {
         }
       />
 
-      {data?.week_plan ? (
+      {selectedWeekPlan ? (
         <WeekPlanPanel
-          weekPlan={data.week_plan}
+          weekPlan={selectedWeekPlan}
           isShifted={selectedWeekStart !== null}
-          onPreviousWeek={() => setSelectedWeekStart(addWeeksIso(data.week_plan.week_start_date, -1))}
+          onPreviousWeek={() => setSelectedWeekStart(addWeeksIso(selectedWeekPlan.week_start_date, -1))}
           onCurrentWeek={() => setSelectedWeekStart(null)}
-          onNextWeek={() => setSelectedWeekStart(addWeeksIso(data.week_plan.week_start_date, 1))}
+          onNextWeek={() => setSelectedWeekStart(addWeeksIso(selectedWeekPlan.week_start_date, 1))}
         />
       ) : null}
 

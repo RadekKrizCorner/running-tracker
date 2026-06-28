@@ -387,7 +387,8 @@
   }
 
   .calendar-board.month {
-    display: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .calendar-board.week {

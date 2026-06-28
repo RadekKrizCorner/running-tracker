@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -34,6 +34,7 @@ AVATAR_IMAGE_PREFIXES = (
     "data:image/jpg;base64,",
     "data:image/webp;base64,",
 )
+MAX_PLANNING_HISTORY_WEEKS = 104
 AVATAR_IMAGE_MAX_BYTES = 1_500_000
 AVATAR_IMAGE_MAX_BASE64_LENGTH = ((AVATAR_IMAGE_MAX_BYTES + 2) // 3) * 4
 AVATAR_IMAGE_MAX_LENGTH = (
@@ -235,7 +236,12 @@ class UserPreferenceUpdate(BaseModel):
         """Normalize planning range start dates to week starts."""
         if value is None:
             return None
-        return week_start(value)
+        normalized = week_start(value)
+        current_week = week_start(date.today())
+        earliest_week = current_week - timedelta(weeks=MAX_PLANNING_HISTORY_WEEKS)
+        if normalized < earliest_week or normalized > current_week:
+            raise ValueError(f"planning_week_start_date must be between {earliest_week} and {current_week}")
+        return normalized
 
 
 class ElevationRecomputeResponse(BaseModel):

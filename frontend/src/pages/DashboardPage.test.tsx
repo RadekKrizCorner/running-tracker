@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
 import { AppShell } from '../components/layout/AppShell';
@@ -9,6 +10,16 @@ import { LanguageProvider } from '../lib/i18n';
 import { DashboardPage } from './DashboardPage';
 
 describe('DashboardPage', () => {
+  test('keeps supporting metrics and all advanced charts visible in responsive styles', () => {
+    const styles = readFileSync('src/styles/components.css', 'utf8');
+
+    expect(styles).not.toMatch(/\.dashboard-secondary-metrics\s*\{\s*display:\s*none;/);
+    expect(styles).not.toMatch(/\.dashboard-page\s*>\s*\.chart-grid\s*>\s*:nth-child\(3\)\s*\{\s*display:\s*none;/);
+    expect(styles).not.toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.dashboard-page\s*>\s*\.chart-grid\s*\{\s*display:\s*none;/,
+    );
+  });
+
   test('presents the plan as information and imported activities as integration data', async () => {
     vi.stubGlobal(
       'fetch',
@@ -523,7 +534,26 @@ describe('DashboardPage', () => {
                     outcome: 'as_planned',
                   },
                 ]
-              : [],
+              : [
+                  {
+                    date: '2026-04-28',
+                    planned_workout_id: 'p-current',
+                    planned_title: 'Current week plan',
+                    planned_type: 'easy',
+                    planned_intensity: 'easy',
+                    planned_distance_m: 6000,
+                    planned_duration_s: 2100,
+                    activity_id: null,
+                    activity_name: null,
+                    actual_intensity: null,
+                    actual_distance_m: 0,
+                    actual_duration_s: 0,
+                    distance_delta_m: -6000,
+                    duration_delta_s: -2100,
+                    intensity_match: null,
+                    outcome: 'waiting',
+                  },
+                ],
           },
         }),
       );
@@ -531,7 +561,7 @@ describe('DashboardPage', () => {
     vi.stubGlobal('fetch', fetchMock);
     const queryClient = new QueryClient();
 
-    render(
+    const { container } = render(
       <QueryClientProvider client={queryClient}>
         <LanguageProvider initialLocale="en-US">
           <DashboardPage />
@@ -540,10 +570,17 @@ describe('DashboardPage', () => {
     );
 
     expect(await screen.findByText(/4\/27\/2026 to 5\/3\/2026/i)).toBeInTheDocument();
+    const todayBrief = container.querySelector('.today-brief');
+    expect(todayBrief).not.toBeNull();
+    expect(within(todayBrief as HTMLElement).getByText(/Current week plan/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Previous week/i }));
 
     expect(await screen.findByText(/4\/20\/2026 to 4\/26\/2026/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Previous week easy/i).length).toBeGreaterThan(0);
+    const updatedTodayBrief = container.querySelector('.today-brief');
+    expect(updatedTodayBrief).not.toBeNull();
+    expect(within(updatedTodayBrief as HTMLElement).getByText(/Current week plan/i)).toBeInTheDocument();
+    expect(within(updatedTodayBrief as HTMLElement).queryByText(/Previous week easy/i)).not.toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('week_start_date=2026-04-20'),
       expect.any(Object),

@@ -145,6 +145,14 @@
   color: var(--green) !important;
 }
 
+.mobile-more-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 2px 4px 4px 12px;
+}
+
 @media (max-width: 980px) {
   .app-shell,
   .app-shell.sidebar-collapsed {
@@ -208,7 +216,14 @@
   }
 
   .activity-custom-range {
-    display: none;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .activity-custom-range label {
+    min-width: 0;
   }
 
   .bottom-nav {
