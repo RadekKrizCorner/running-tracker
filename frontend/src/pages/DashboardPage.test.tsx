@@ -110,6 +110,44 @@ describe('DashboardPage', () => {
     expect(screen.queryByText(/Tomorrow long run planned today/i)).not.toBeInTheDocument();
   });
 
+  test('does not present a cancelled workout as planned for today', async () => {
+    const today = toIsoDate(new Date());
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/connections/strava/status')) {
+          return Promise.resolve(jsonResponse(stravaStatusFixture()));
+        }
+        return Promise.resolve(jsonResponse({
+          ...dashboardFixture(),
+          upcoming_workouts: [{
+            id: 'cancelled-plan',
+            scheduled_date: today,
+            title: 'Cancelled tempo',
+            workout_type: 'tempo',
+            target_distance_m: 10000,
+            target_duration_s: 3600,
+            target_intensity: 'hard',
+            status: 'cancelled',
+          }],
+        }));
+      }),
+    );
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <LanguageProvider initialLocale="en-US">
+          <MemoryRouter>
+            <DashboardPage />
+          </MemoryRouter>
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: /No run is planned for today/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Cancelled tempo planned today/i)).not.toBeInTheDocument();
+  });
+
   test('renders empty state when no activities exist', async () => {
     vi.stubGlobal(
       'fetch',

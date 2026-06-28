@@ -229,7 +229,7 @@ function normalizePlanningRangeStart(value: string, fallback: string) {
 
 function weekCountInclusive(startDate: string, endDate: string) {
   const diffDays = Math.floor((isoDateMs(endDate) - isoDateMs(startDate)) / 86400000);
-  return Math.max(1, Math.floor(diffDays / DAYS_PER_WEEK) + 1);
+  return diffDays < 0 ? 0 : Math.floor(diffDays / DAYS_PER_WEEK) + 1;
 }
 
 function isoDateMs(value: string) {
@@ -362,15 +362,30 @@ export function PlansPage() {
     : null;
   const planningPreferencesResolved = preferences.isSuccess || preferences.isError;
   const requestedPlanningOutlookRangeStart = lockedPlanStart ?? plannedOutlookStart;
+  const planningOutlookIntersectsHorizon = requestedPlanningOutlookRangeStart <= longTermEnd;
   const earliestBoundedOutlookStart = addDaysToIso(longTermEnd, -(MAX_PLANNING_OUTLOOK_WEEK_COUNT - 1) * DAYS_PER_WEEK);
-  const planningOutlookRangeStart = requestedPlanningOutlookRangeStart < earliestBoundedOutlookStart
+  const boundedPlanningOutlookRangeStart = requestedPlanningOutlookRangeStart < earliestBoundedOutlookStart
     ? earliestBoundedOutlookStart
     : requestedPlanningOutlookRangeStart;
-  const planningOutlookWeekCount = weekCountInclusive(planningOutlookRangeStart, longTermEnd);
+  const planningOutlookRangeStart = planningOutlookIntersectsHorizon
+    ? boundedPlanningOutlookRangeStart
+    : weekStartIso(longTermEnd);
+  const planningOutlookWeekCount = planningOutlookIntersectsHorizon
+    ? weekCountInclusive(planningOutlookRangeStart, longTermEnd)
+    : 0;
+  const lockedRangeIntersectsHorizon = lockedPlanStart !== null && lockedPlanStart <= longTermEnd;
   const longTermCalendar = useCalendar(horizonStart, longTermEnd);
-  const planningOutlookCalendar = useCalendar(planningOutlookRangeStart, longTermEnd, planningPreferencesResolved);
+  const planningOutlookCalendar = useCalendar(
+    planningOutlookRangeStart,
+    longTermEnd,
+    planningPreferencesResolved && planningOutlookIntersectsHorizon,
+  );
   const recentLoadWeeks = useRecentWeeklyAnalytics(6, planningPreferencesResolved && lockedPlanStart === null);
-  const lockedLoadWeeks = useWeeklyAnalyticsRange(lockedPlanStart, longTermEnd, lockedPlanStart !== null);
+  const lockedLoadWeeks = useWeeklyAnalyticsRange(
+    lockedRangeIntersectsHorizon ? lockedPlanStart : null,
+    longTermEnd,
+    lockedRangeIntersectsHorizon,
+  );
   const saveWeek = useSaveWeekSchedule();
   const createTemplate = useCreateWorkoutTemplate();
   const createPoolItem = useCreateWorkoutPoolItem();
@@ -473,7 +488,9 @@ export function PlansPage() {
       ),
     [dirtyWeekDrafts, planningOutlookCalendar.data?.planned_workouts, planningOutlookRangeStart, planningOutlookWeekCount],
   );
-  const activeLoadWeeks = lockedPlanStart ? lockedLoadWeeks.data : recentLoadWeeks.data;
+  const activeLoadWeeks = lockedPlanStart
+    ? (lockedRangeIntersectsHorizon ? lockedLoadWeeks.data : [])
+    : recentLoadWeeks.data;
   const historicalLoadWeeks = Array.isArray(activeLoadWeeks) ? activeLoadWeeks : [];
 
   useEffect(() => {
@@ -1140,6 +1157,8 @@ export function PlansPage() {
               <LongTermWeekRow
                 key={week.weekStart}
                 week={week}
+                horizonStart={horizonStart}
+                horizonEnd={longTermEnd}
                 draggedDate={draggedPlanDate}
                 dragOverDate={dragOverPlanDate}
                 onDragEnd={() => {
@@ -1149,6 +1168,7 @@ export function PlansPage() {
                 onDragOver={setDragOverPlanDate}
                 onDragStart={setDraggedPlanDate}
                 onDropDay={moveLongTermDay}
+                onMoveDay={moveLongTermDay}
                 onSelectDay={openLongTermDay}
                 readOnly={isReadOnlyDemo}
               />
@@ -1742,7 +1762,10 @@ function LongTermWeekRow({
   onDragOver,
   onDragStart,
   onDropDay,
+  onMoveDay,
   week,
+  horizonStart,
+  horizonEnd,
   onSelectDay,
   readOnly,
 }: {
@@ -1752,7 +1775,10 @@ function LongTermWeekRow({
   onDragOver: (date: string) => void;
   onDragStart: (date: string) => void;
   onDropDay: (sourceDate: string, targetDate: string) => void;
+  onMoveDay: (sourceDate: string, targetDate: string) => void;
   week: LongTermWeekPlan;
+  horizonStart: string;
+  horizonEnd: string;
   onSelectDay: (date: string) => void;
   readOnly: boolean;
 }) {
@@ -1775,6 +1801,10 @@ function LongTermWeekRow({
             onDragOver={onDragOver}
             onDragStart={onDragStart}
             onDropDay={onDropDay}
+            canMoveEarlier={day.scheduled_date > horizonStart}
+            canMoveLater={day.scheduled_date < horizonEnd}
+            onMoveEarlier={() => onMoveDay(day.scheduled_date, addDaysToIso(day.scheduled_date, -1))}
+            onMoveLater={() => onMoveDay(day.scheduled_date, addDaysToIso(day.scheduled_date, 1))}
             onSelect={() => onSelectDay(day.scheduled_date)}
             readOnly={readOnly}
           />
@@ -1805,6 +1835,10 @@ function LongTermDayButton({
   onDragOver,
   onDragStart,
   onDropDay,
+  canMoveEarlier,
+  canMoveLater,
+  onMoveEarlier,
+  onMoveLater,
   onSelect,
   readOnly,
 }: {
@@ -1815,6 +1849,10 @@ function LongTermDayButton({
   onDragOver: (date: string) => void;
   onDragStart: (date: string) => void;
   onDropDay: (sourceDate: string, targetDate: string) => void;
+  canMoveEarlier: boolean;
+  canMoveLater: boolean;
+  onMoveEarlier: () => void;
+  onMoveLater: () => void;
   onSelect: () => void;
   readOnly: boolean;
 }) {
@@ -1868,23 +1906,47 @@ function LongTermDayButton({
   }
 
   return (
-    <button
-      className={`long-term-day-button ${state} ${typeClass}${canDrag ? ' draggable' : ''}${isDragged ? ' dragging' : ''}${isDropTarget ? ' drop-target' : ''}`}
-      type="button"
-      draggable={canDrag}
-      aria-grabbed={isDragged || undefined}
-      aria-label={t('plans.openLongTermDay', { date: shortWeekday(day.scheduled_date), summary })}
-      onDragEnd={onDragEnd}
-      onDragOver={handleDragOver}
-      onDragStart={handleDragStart}
-      onDrop={handleDrop}
-      onClick={onSelect}
-    >
-      <span>{shortWeekday(day.scheduled_date)}</span>
-      <strong>{summary}</strong>
-      {extraSessionCount > 0 ? <em>{t('plans.moreSessions', { count: extraSessionCount })}</em> : null}
-      <small>{detail}</small>
-    </button>
+    <div className="long-term-day-slot">
+      <button
+        className={`long-term-day-button ${state} ${typeClass}${canDrag ? ' draggable' : ''}${isDragged ? ' dragging' : ''}${isDropTarget ? ' drop-target' : ''}`}
+        type="button"
+        draggable={canDrag}
+        aria-grabbed={isDragged || undefined}
+        aria-label={t('plans.openLongTermDay', { date: shortWeekday(day.scheduled_date), summary })}
+        onDragEnd={onDragEnd}
+        onDragOver={handleDragOver}
+        onDragStart={handleDragStart}
+        onDrop={handleDrop}
+        onClick={onSelect}
+      >
+        <span>{shortWeekday(day.scheduled_date)}</span>
+        <strong>{summary}</strong>
+        {extraSessionCount > 0 ? <em>{t('plans.moreSessions', { count: extraSessionCount })}</em> : null}
+        <small>{detail}</small>
+      </button>
+      {canDrag ? (
+        <div className="long-term-day-move-actions" role="group" aria-label={t('plans.moveDayActions', { summary })}>
+          <button
+            className="long-term-day-move-button"
+            type="button"
+            aria-label={t('plans.moveDayEarlier', { summary })}
+            disabled={!canMoveEarlier}
+            onClick={onMoveEarlier}
+          >
+            <ArrowLeft size={14} aria-hidden="true" />
+          </button>
+          <button
+            className="long-term-day-move-button"
+            type="button"
+            aria-label={t('plans.moveDayLater', { summary })}
+            disabled={!canMoveLater}
+            onClick={onMoveLater}
+          >
+            <ArrowRight size={14} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

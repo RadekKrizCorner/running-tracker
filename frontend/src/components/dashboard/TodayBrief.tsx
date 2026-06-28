@@ -12,7 +12,9 @@ type TodayBriefProps = {
 export function TodayBrief({ data }: TodayBriefProps) {
   const { t } = useTranslation();
   const now = new Date();
-  const planned = data?.upcoming_workouts.find((workout) => workout.scheduled_date === toIsoDate(now));
+  const planned = data?.upcoming_workouts.find(
+    (workout) => workout.scheduled_date === toIsoDate(now) && workout.status !== 'cancelled',
+  );
   const plan = data?.week_plan;
   const isAboveDistancePlan = Boolean(plan && plan.distance_delta_m > 0);
   const headline = planned

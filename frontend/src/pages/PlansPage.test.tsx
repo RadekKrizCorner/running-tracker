@@ -270,6 +270,39 @@ describe('PlansPage', () => {
     ]);
   });
 
+  test('moves a planned day across week boundaries with keyboard and touch accessible controls', async () => {
+    const currentWeek = weekStartIso();
+    const sunday = addDaysToIso(currentWeek, 6);
+    const nextWeek = addDaysToIso(currentWeek, 7);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      if (url.includes('/calendar?')) {
+        return Promise.resolve(jsonResponse({
+          planned_workouts: [plannedWorkout('sunday-tempo', sunday, 'Sunday tempo', 'tempo', 3600, 12000)],
+          activities: [],
+          events: [],
+        }));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const currentWeekRow = await screen.findByTestId(`long-term-week-${currentWeek}`);
+    const nextWeekRow = await screen.findByTestId(`long-term-week-${nextWeek}`);
+    await waitFor(() => expect(within(currentWeekRow).getByRole('button', { name: /Open Sun, Sunday tempo/i })).toBeInTheDocument());
+
+    await userEvent.click(within(currentWeekRow).getByRole('button', { name: /Move Sunday tempo to next day/i }));
+
+    expect(within(currentWeekRow).getByRole('button', { name: /Open Sun, Unscheduled/i })).toBeInTheDocument();
+    expect(within(nextWeekRow).getByRole('button', { name: /Open Mon, Sunday tempo/i })).toBeInTheDocument();
+  });
+
   test('shows favorite templates in day editor quick actions and applies them', async () => {
     const preferenceBodies: unknown[] = [];
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
@@ -889,6 +922,39 @@ describe('PlansPage', () => {
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/analytics/recent-weeks'))).toBe(false);
   });
 
+  test('never requests an inverted calendar or analytics range when the horizon precedes a saved lock', async () => {
+    const currentWeek = weekStartIso();
+    const historicalHorizon = addDaysToIso(currentWeek, -140);
+    const historicalEnd = addDaysToIso(historicalHorizon, 83);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences({ planning_week_start_date: currentWeek })));
+      }
+      if (url.includes('/analytics/')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = renderPlansPage();
+
+    await screen.findByRole('heading', { name: /Long-term plan/i });
+    const horizonInput = container.querySelector('.date-controls input[type="date"]') as HTMLInputElement;
+    expect(horizonInput).not.toBeNull();
+    fireEvent.change(horizonInput, { target: { value: historicalHorizon } });
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${historicalHorizon}&end_date=${historicalEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+    });
+    expect(fetchMock.mock.calls.some(([url]) => hasInvertedDateRange(String(url)))).toBe(false);
+  });
+
   test('saves and resets the planning range lock from the page header', async () => {
     const currentWeek = weekStartIso();
     const selectedDate = addDaysToIso(currentWeek, -12);
@@ -1195,13 +1261,23 @@ describe('PlansPage', () => {
 
 function renderPlansPage(initialLocale: AppLocale = 'en-US') {
   const queryClient = new QueryClient();
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <LanguageProvider initialLocale={initialLocale}>
         <PlansPage />
       </LanguageProvider>
     </QueryClientProvider>,
   );
+}
+
+function hasInvertedDateRange(url: string) {
+  if (!url.includes('/calendar?') && !url.includes('/analytics/weekly?')) {
+    return false;
+  }
+  const parsed = new URL(url, 'http://localhost');
+  const startDate = parsed.searchParams.get('start_date');
+  const endDate = parsed.searchParams.get('end_date');
+  return Boolean(startDate && endDate && startDate > endDate);
 }
 
 async function openLongTermDay(dayName = 'Mon', weekStart = weekStartIso(), buttonName: RegExp | null = null, dialogName: RegExp | null = null) {
