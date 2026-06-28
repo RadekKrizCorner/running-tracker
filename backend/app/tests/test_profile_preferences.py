@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from app.core.time import week_start
 from app.tests.conftest import setup_and_login
@@ -95,6 +95,23 @@ def test_owner_preferences_reject_planning_ranges_outside_supported_history(clie
 
     assert future.status_code == 422
     assert too_old.status_code == 422
+
+
+def test_planning_range_uses_owner_local_week_at_timezone_rollover(client, monkeypatch) -> None:
+    """Verify a new local Monday is accepted before the UTC server date rolls over."""
+    setup_and_login(client)
+    monkeypatch.setattr(
+        "app.services.profile_service.utc_now",
+        lambda: datetime(2026, 6, 28, 22, 30, tzinfo=UTC),
+    )
+
+    response = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": "2026-06-29"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["planning_week_start_date"] == "2026-06-29"
 
 
 def test_owner_preferences_persist_avatar_choice(client) -> None:

@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { useRecentWeeklyAnalytics, useWeeklyAnalyticsRange } from '../features/analytics/api';
+import { useWeeklyAnalyticsRange } from '../features/analytics/api';
 import {
   useCalendar,
   useCreateWorkoutPoolItem,
@@ -363,7 +363,11 @@ export function PlansPage() {
   const planningPreferencesResolved = preferences.isSuccess || preferences.isError;
   const requestedPlanningOutlookRangeStart = lockedPlanStart ?? plannedOutlookStart;
   const planningOutlookIntersectsHorizon = requestedPlanningOutlookRangeStart <= longTermEnd;
-  const earliestBoundedOutlookStart = addDaysToIso(longTermEnd, -(MAX_PLANNING_OUTLOOK_WEEK_COUNT - 1) * DAYS_PER_WEEK);
+  const longTermLastWeekStart = weekStartIso(longTermEnd);
+  const earliestBoundedOutlookStart = addDaysToIso(
+    longTermLastWeekStart,
+    -(MAX_PLANNING_OUTLOOK_WEEK_COUNT - 1) * DAYS_PER_WEEK,
+  );
   const boundedPlanningOutlookRangeStart = requestedPlanningOutlookRangeStart < earliestBoundedOutlookStart
     ? earliestBoundedOutlookStart
     : requestedPlanningOutlookRangeStart;
@@ -373,7 +377,6 @@ export function PlansPage() {
   const planningOutlookWeekCount = planningOutlookIntersectsHorizon
     ? weekCountInclusive(planningOutlookRangeStart, longTermEnd)
     : 0;
-  const lockedRangeIntersectsHorizon = lockedPlanStart !== null && lockedPlanStart <= longTermEnd;
   const outlookActive = planView === 'outlook';
   const longTermCalendar = useCalendar(horizonStart, longTermEnd, outlookActive);
   const planningOutlookCalendar = useCalendar(
@@ -381,14 +384,10 @@ export function PlansPage() {
     longTermEnd,
     outlookActive && planningPreferencesResolved && planningOutlookIntersectsHorizon,
   );
-  const recentLoadWeeks = useRecentWeeklyAnalytics(
-    6,
-    outlookActive && planningPreferencesResolved && lockedPlanStart === null,
-  );
-  const lockedLoadWeeks = useWeeklyAnalyticsRange(
-    lockedRangeIntersectsHorizon ? lockedPlanStart : null,
+  const outlookLoadWeeks = useWeeklyAnalyticsRange(
+    planningOutlookIntersectsHorizon ? planningOutlookRangeStart : null,
     longTermEnd,
-    outlookActive && lockedRangeIntersectsHorizon,
+    outlookActive && planningPreferencesResolved && planningOutlookIntersectsHorizon,
   );
   const saveWeek = useSaveWeekSchedule();
   const createTemplate = useCreateWorkoutTemplate();
@@ -500,11 +499,7 @@ export function PlansPage() {
     },
     [dirtyWeekDrafts, outlookActive, planningOutlookCalendar.data?.planned_workouts, planningOutlookRangeStart, planningOutlookWeekCount],
   );
-  const activeLoadWeeks = !outlookActive
-    ? []
-    : (lockedPlanStart
-        ? (lockedRangeIntersectsHorizon ? lockedLoadWeeks.data : [])
-        : recentLoadWeeks.data);
+  const activeLoadWeeks = outlookActive ? outlookLoadWeeks.data : [];
   const historicalLoadWeeks = Array.isArray(activeLoadWeeks) ? activeLoadWeeks : [];
 
   useEffect(() => {

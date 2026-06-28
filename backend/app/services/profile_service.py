@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -10,10 +10,13 @@ from sqlalchemy.orm import Session
 from app.analytics.intensity import classify_intensity
 from app.analytics.load import calculate_training_load
 from app.core.exceptions import AppException
-from app.core.time import local_date
+from app.core.time import local_date, utc_now, week_start
 from app.models import Activity, ActivityStream, HeartRateZoneSet, User, UserPreference
 from app.schemas.profile import HeartRateZoneSetCreate, UserPreferenceUpdate
 from app.services.analytics_service import recompute_owner_weekly_metrics
+
+
+MAX_PLANNING_HISTORY_WEEKS = 104
 
 
 def create_hr_zone_set(session: Session, user: User, payload: HeartRateZoneSetCreate) -> HeartRateZoneSet:
@@ -72,8 +75,11 @@ def get_or_create_user_preferences(session: Session, user: User) -> UserPreferen
 
 def update_user_preferences(session: Session, user: User, payload: UserPreferenceUpdate) -> UserPreference:
     """Update owner UI preferences."""
-    preferences = get_or_create_user_preferences(session, user)
     updates = payload.model_dump(exclude_unset=True)
+    planning_week_start = updates.get("planning_week_start_date")
+    if planning_week_start is not None:
+        validate_planning_week_start(user, planning_week_start)
+    preferences = get_or_create_user_preferences(session, user)
     if "pace_zones" in updates and updates["pace_zones"] is not None:
         updates["pace_zones"] = [zone.model_dump() if hasattr(zone, "model_dump") else zone for zone in payload.pace_zones or []]
     nullable_preference_fields = {
@@ -91,6 +97,18 @@ def update_user_preferences(session: Session, user: User, payload: UserPreferenc
     session.commit()
     session.refresh(preferences)
     return preferences
+
+
+def validate_planning_week_start(user: User, value: date) -> None:
+    """Validate a planning range against the owner's current local week."""
+    current_week = week_start(local_date(utc_now(), user.timezone))
+    earliest_week = current_week - timedelta(weeks=MAX_PLANNING_HISTORY_WEEKS)
+    if value < earliest_week or value > current_week:
+        raise AppException(
+            422,
+            "PLANNING_RANGE_INVALID",
+            f"planning_week_start_date must be between {earliest_week} and {current_week}",
+        )
 
 
 def list_hr_zone_sets(session: Session, user_id: UUID) -> list[HeartRateZoneSet]:

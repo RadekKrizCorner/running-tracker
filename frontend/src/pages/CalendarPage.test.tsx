@@ -11,6 +11,8 @@ describe('CalendarPage', () => {
   test('keeps the default month board visible at the mobile breakpoint', () => {
     const styles = readFileSync('src/styles/pages.css', 'utf8');
 
+    expect(styles).toMatch(/\.calendar-board\.month\s+\.calendar-day-cell\s*\{/);
+    expect(styles).not.toMatch(/\.calendar-board\.month\s+\.calendar-day\s*\{/);
     expect(styles).toMatch(
       /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s*\{[\s\S]*?display:\s*grid;/,
     );

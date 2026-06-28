@@ -239,7 +239,7 @@
   background: var(--border);
 }
 
-.calendar-board.month .calendar-day {
+.calendar-board.month .calendar-day-cell {
   min-height: 132px;
   border: 0;
   border-radius: 0;

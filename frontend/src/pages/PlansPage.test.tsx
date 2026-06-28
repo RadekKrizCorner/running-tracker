@@ -62,8 +62,47 @@ describe('PlansPage', () => {
         expect.stringContaining(`/calendar?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`),
         expect.objectContaining({ credentials: 'include' }),
       );
-      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/analytics/recent-weeks?weeks=6'))).toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/analytics/weekly?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
     });
+  });
+
+  test('aligns bounded planned and actual Outlook ranges to the same Monday', async () => {
+    const currentWeek = weekStartIso();
+    const lockedStart = addDaysToIso(currentWeek, -104 * 7);
+    const futureHorizon = addDaysToIso(currentWeek, 120 * 7);
+    const longTermEnd = addDaysToIso(futureHorizon, 83);
+    const boundedStart = addDaysToIso(futureHorizon, -104 * 7);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates') || url.includes('/workout-pool') || url.includes('/analytics/')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences({ planning_week_start_date: lockedStart })));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = renderPlansPage();
+
+    await screen.findByRole('heading', { name: /Weekly plan/i });
+    const horizonInput = container.querySelector('.date-controls input[type="date"]') as HTMLInputElement;
+    fireEvent.change(horizonInput, { target: { value: futureHorizon } });
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${boundedStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/analytics/weekly?start_date=${boundedStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+    });
+    expect(new Date(`${boundedStart}T00:00:00Z`).getUTCDay()).toBe(1);
   });
 
   test('saves a week from a selected workout template', async () => {
@@ -793,7 +832,7 @@ describe('PlansPage', () => {
     const plannedOutlookStart = addDaysToIso(currentWeek, -28);
     const longTermEnd = addDaysToIso(currentWeek, 83);
     const fetchMock = vi.fn((url: string) => {
-      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+      if (url.includes('/analytics/weekly?')) {
         return Promise.resolve(
           jsonResponse([
             weeklyMetric(addDaysToIso(currentWeek, -14), 82, 18000, 7200),
@@ -855,7 +894,7 @@ describe('PlansPage', () => {
     const longTermEnd = addDaysToIso(currentWeek, 83);
     const nextWeek = weekStartIso(addDaysToIso(currentWeek, 7));
     const fetchMock = vi.fn((url: string) => {
-      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+      if (url.includes('/analytics/weekly?')) {
         return Promise.resolve(jsonResponse([weeklyMetric(plannedOutlookStart, 82, 18000, 5400)]));
       }
       if (url.includes('/workout-templates')) {
@@ -1004,7 +1043,7 @@ describe('PlansPage', () => {
         preferenceBodies.push(body);
         return Promise.resolve(jsonResponse(defaultPreferences(body)));
       }
-      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+      if (url.includes('/analytics/weekly?')) {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes('/workout-templates')) {
@@ -1215,7 +1254,7 @@ describe('PlansPage', () => {
 
   test('keeps simplified long-term planning controls on the main page', async () => {
     const fetchMock = vi.fn((url: string) => {
-      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+      if (url.includes('/analytics/weekly?')) {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes('/workout-templates')) {
@@ -1252,7 +1291,7 @@ describe('PlansPage', () => {
       if (url.includes('/calendar/week') && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
       }
-      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+      if (url.includes('/analytics/weekly?')) {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes('/workout-templates')) {
