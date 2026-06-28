@@ -25,7 +25,7 @@ import {
 } from '../features/plans/api';
 import { useMe } from '../features/auth/api';
 import { useUpdateUserPreferences, useUserPreferences } from '../features/profile/api';
-import { addDaysToIso, weekdayLabel, weekStartIso } from '../lib/date';
+import { addDaysToIso, todayIso, weekdayLabel, weekStartIso } from '../lib/date';
 import { formatDate, formatDistance, formatDuration, formatShortDate, getFormatLocale } from '../lib/format';
 import { enumLabel, useTranslation } from '../lib/i18n';
 import type { CalendarActivity, CalendarEvent, PlannedWorkout, WeeklyMetric, WorkoutPoolItem, WorkoutTemplate } from '../lib/api/types';
@@ -335,13 +335,16 @@ function rowFromRaceEvent(date: string, event: CalendarEvent | null, index: numb
 export function PlansPage() {
   const { t } = useTranslation();
   const me = useMe();
+  const currentWeekStart = weekStartIso(todayIso(me.data?.timezone));
   const [planView, setPlanView] = useState<'week' | 'outlook'>('week');
-  const [weekStart, setWeekStart] = useState(weekStartIso());
-  const [horizonStart, setHorizonStart] = useState(weekStartIso());
-  const [planRangeStartInput, setPlanRangeStartInput] = useState(weekStartIso());
+  const [weekStartOverride, setWeekStart] = useState<string | null>(null);
+  const [horizonStartOverride, setHorizonStart] = useState<string | null>(null);
+  const [planRangeStartInputOverride, setPlanRangeStartInput] = useState<string | null>(null);
+  const weekStart = weekStartOverride ?? currentWeekStart;
+  const horizonStart = horizonStartOverride ?? currentWeekStart;
+  const planRangeStartInput = planRangeStartInputOverride ?? currentWeekStart;
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDaysToIso(weekStart, index)), [weekStart]);
   const weekEnd = weekDates[6];
-  const currentWeekStart = weekStartIso();
   const planningRangeMin = addDaysToIso(currentWeekStart, -MAX_PLANNING_HISTORY_WEEKS * DAYS_PER_WEEK);
   const planningRangeMax = currentWeekStart;
   const normalizedPlanRangeInput = normalizePlanningRangeStart(planRangeStartInput, horizonStart);

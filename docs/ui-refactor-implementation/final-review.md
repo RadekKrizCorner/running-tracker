@@ -41,7 +41,7 @@ Refaktor nahrazuje původní vizuální vrstvu systémem Training Brief napří�
 
 ## Verifikace
 
-- Frontend testy: 22 souborů, 163 testů včetně regresního pokrytí zrušeného dnešního workoutu, zarovnaných plánovacích rozsahů, přístupného přesunu mezi týdny, mobilního řazení a lazy Outlook dotazů.
+- Frontend testy: 23 souborů, 164 testů včetně regresního pokrytí owner-local timezone rolloveru, zrušeného dnešního workoutu, zarovnaných plánovacích rozsahů, přístupného přesunu mezi týdny, mobilního řazení a lazy Outlook dotazů.
 - Frontend production build: TypeScript a Vite build bez chyby.
 - Backend testy: 176 testů bez failure při explicitně produkčně bezpečných testovacích overrides (`DEMO_ACCOUNT_ENABLED=false`, `ROUTING_ENABLED=false`, `ROUTING_PROVIDER=valhalla`).
 - `git diff --check`: bez whitespace chyb.
