@@ -12,7 +12,7 @@ Refaktor nahrazuje původní vizuální vrstvu systémem Training Brief napří�
 
 - Všechny původní hlavní routy zůstaly zachované.
 - Dashboard staví na datech z dashboard API a transparentně rozlišuje planned, completed a synced data.
-- Dnešní headline vybírá pouze workout se `scheduled_date` odpovídajícím dnešnímu lokálnímu datu; budoucí workout už není prezentován jako dnešní.
+- Dnešní headline vybírá pouze workout se `scheduled_date` odpovídajícím dnešnímu datu v časové zóně vlastníka; budoucí workout ani workout z vedlejšího UTC dne už není prezentován jako dnešní.
 - Activities používají na desktopu tabulku a na mobilu přehledný seznam nad stejnými daty a filtry.
 - Planning zachovává týden, outlook, knihovnu, editor dne, šablony, přesuny, více session i read-only demo stav.
 - UI neobsahuje ruční „Start Workout“ ani ruční dokončování; dokončené aktivity zůstávají integrační data.
@@ -41,7 +41,7 @@ Refaktor nahrazuje původní vizuální vrstvu systémem Training Brief napří�
 
 ## Verifikace
 
-- Frontend testy: 23 souborů, 164 testů včetně regresního pokrytí owner-local timezone rolloveru, zrušeného dnešního workoutu, zarovnaných plánovacích rozsahů, přístupného přesunu mezi týdny, mobilního řazení a lazy Outlook dotazů.
+- Frontend testy: 23 souborů, 165 testů včetně regresního pokrytí owner-local timezone rolloveru v plánování i dashboardovém Today, zrušeného dnešního workoutu, zarovnaných plánovacích rozsahů, přístupného přesunu mezi týdny, mobilního řazení a lazy Outlook dotazů.
 - Frontend production build: TypeScript a Vite build bez chyby.
 - Backend testy: 176 testů bez failure při explicitně produkčně bezpečných testovacích overrides (`DEMO_ACCOUNT_ENABLED=false`, `ROUTING_ENABLED=false`, `ROUTING_PROVIDER=valhalla`).
 - `git diff --check`: bez whitespace chyb.

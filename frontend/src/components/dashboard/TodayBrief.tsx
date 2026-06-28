@@ -1,19 +1,20 @@
 import { CalendarDays, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { Dashboard } from '../../lib/api/types';
-import { toIsoDate } from '../../lib/date';
+import { todayIso } from '../../lib/date';
 import { formatDate, formatDistance, formatDuration } from '../../lib/format';
 import { useTranslation } from '../../lib/i18n';
 
 type TodayBriefProps = {
   data: Dashboard | undefined;
+  timeZone?: string;
 };
 
-export function TodayBrief({ data }: TodayBriefProps) {
+export function TodayBrief({ data, timeZone }: TodayBriefProps) {
   const { t } = useTranslation();
-  const now = new Date();
+  const today = todayIso(timeZone);
   const planned = data?.upcoming_workouts.find(
-    (workout) => workout.scheduled_date === toIsoDate(now) && workout.status !== 'cancelled',
+    (workout) => workout.scheduled_date === today && workout.status !== 'cancelled',
   );
   const plan = data?.week_plan;
   const isAboveDistancePlan = Boolean(plan && plan.distance_delta_m > 0);
@@ -29,7 +30,7 @@ export function TodayBrief({ data }: TodayBriefProps) {
           <h1 id="today-brief-title">{headline}</h1>
           <p>{isAboveDistancePlan ? t('dashboard.weekAbovePlan') : t('dashboard.weekInProgress')}</p>
         </div>
-        <time dateTime={now.toISOString()}>{formatDate(now.toISOString())}</time>
+        <time dateTime={today}>{formatDate(today)}</time>
       </header>
 
       {planned ? (

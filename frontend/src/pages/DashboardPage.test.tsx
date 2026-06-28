@@ -5,11 +5,51 @@ import { readFileSync } from 'node:fs';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, test, vi } from 'vitest';
 import { AppShell } from '../components/layout/AppShell';
+import { TodayBrief } from '../components/dashboard/TodayBrief';
 import { toIsoDate } from '../lib/date';
 import { LanguageProvider } from '../lib/i18n';
 import { DashboardPage } from './DashboardPage';
 
 describe('DashboardPage', () => {
+  test('uses the owner timezone to select the workout planned for today', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-06-28T22:30:00Z'));
+    try {
+      render(
+        <LanguageProvider initialLocale="en-US">
+          <MemoryRouter>
+            <TodayBrief
+              data={{
+                ...dashboardFixture(),
+                upcoming_workouts: [{
+                  id: 'owner-monday',
+                  plan_id: 'owner-plan',
+                  scheduled_date: '2026-06-29',
+                  session_label: null,
+                  sort_order: 0,
+                  title: 'Monday easy run',
+                  workout_type: 'easy',
+                  target_distance_m: 7000,
+                  target_duration_s: 2400,
+                  target_intensity: 'easy',
+                  instructions: null,
+                  completed_activity_id: null,
+                  status: 'planned',
+                }],
+              }}
+              timeZone="Europe/Prague"
+            />
+          </MemoryRouter>
+        </LanguageProvider>,
+      );
+
+      expect(screen.getByRole('heading', { name: /Monday easy run planned today/i })).toBeInTheDocument();
+      expect(screen.getByText('6/29/2026')).toHaveAttribute('datetime', '2026-06-29');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test('keeps supporting metrics and all advanced charts visible in responsive styles', () => {
     const styles = readFileSync('src/styles/components.css', 'utf8');
 

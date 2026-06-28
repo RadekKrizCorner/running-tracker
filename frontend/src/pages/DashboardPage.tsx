@@ -7,6 +7,7 @@ import { ProgressMeter } from '../components/ui/ProgressMeter';
 import { StatusPill } from '../components/ui/StatusPill';
 import { RunnerScene } from '../components/visuals/RunnerScene';
 import { TodayBrief } from '../components/dashboard/TodayBrief';
+import { useMe } from '../features/auth/api';
 import {
   useStravaStatus,
   useStravaSync,
@@ -26,6 +27,7 @@ export function DashboardPage() {
   const { t } = useTranslation();
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
   const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(null);
+  const me = useMe();
   const dashboard = useDashboard('week');
   const selectedWeekDashboard = useDashboard('week', selectedWeekStart ?? undefined);
   const strava = useStravaStatus();
@@ -56,7 +58,7 @@ export function DashboardPage() {
 
   return (
     <div className="page-stack dashboard-page">
-      <TodayBrief data={data} />
+      <TodayBrief data={data} timeZone={me.data?.timezone} />
 
       <section className="metric-grid dashboard-secondary-metrics" aria-label={t('dashboard.supportingMetrics')}>
         <MetricCard label={t('dashboard.movingTime')} value={formatDuration(data?.this_week.moving_time_s)} detail={t('dashboard.thisWeek')} />
