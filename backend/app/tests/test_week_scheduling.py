@@ -238,7 +238,7 @@ def test_week_schedule_creates_manual_training_plan(client) -> None:
 
 
 def test_week_copy_endpoint_copies_source_week_to_target_week(client) -> None:
-    """Verify owner can copy one manual week into another week."""
+    """Verify week copy carries active sessions but not cancelled workouts."""
     setup_and_login(client)
     source = client.post(
         "/api/v1/calendar/week",
@@ -268,6 +268,14 @@ def test_week_copy_endpoint_copies_source_week_to_target_week(client) -> None:
         },
     )
     assert source.status_code == 200
+    source_tempo = next(
+        workout for workout in source.json()["planned_workouts"] if workout["title"] == "Source tempo"
+    )
+    cancelled = client.patch(
+        f"/api/v1/planned-workouts/{source_tempo['id']}",
+        json={"status": "cancelled"},
+    )
+    assert cancelled.status_code == 200
 
     copied = client.post(
         "/api/v1/calendar/week/copy",
@@ -282,7 +290,6 @@ def test_week_copy_endpoint_copies_source_week_to_target_week(client) -> None:
     workouts = copied.json()["planned_workouts"]
     assert [(workout["scheduled_date"], workout["title"]) for workout in workouts] == [
         ("2026-05-12", "Source easy"),
-        ("2026-05-15", "Source tempo"),
     ]
     assert copied.json()["plan"]["title"] == "Copied week"
 

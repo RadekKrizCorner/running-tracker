@@ -286,6 +286,7 @@ def copy_week_schedule(session: Session, user: User, request: WeekCopyRequest) -
                 PlannedWorkout.user_id == user.id,
                 PlannedWorkout.scheduled_date >= source_start,
                 PlannedWorkout.scheduled_date <= source_end,
+                PlannedWorkout.status != "cancelled",
             )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
         )

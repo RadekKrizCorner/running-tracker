@@ -40,7 +40,7 @@ def test_report_template_lookup_is_owner_scoped(client: TestClient) -> None:
 
 
 def test_weekly_report_prefill_uses_owner_week_data(client: TestClient) -> None:
-    """Verify report prefill uses owner-scoped planned and completed week data."""
+    """Verify report prefill uses owner data and excludes cancelled plan volume."""
     from app.db.session import get_session_factory
     from app.models import User
     from app.services.report_prefill_service import build_weekly_report_prefill
@@ -566,6 +566,17 @@ def _seed_report_builder_week(client: TestClient) -> None:
                     target_duration_s=5400,
                     target_intensity="easy",
                     status="planned",
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    plan_id=plan.id,
+                    scheduled_date=date(2026, 5, 19),
+                    workout_type="tempo",
+                    title="Zrušené tempo",
+                    target_distance_m=Decimal("100000"),
+                    target_duration_s=18000,
+                    target_intensity="hard",
+                    status="cancelled",
                 ),
             ]
         )

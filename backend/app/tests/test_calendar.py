@@ -39,7 +39,7 @@ def test_calendar_returns_activity_dates_in_owner_timezone(client) -> None:
 
 
 def test_calendar_returns_custom_events_with_plans_and_activities(client) -> None:
-    """Verify calendar includes planned workouts, completed activities, and custom events."""
+    """Verify calendar includes active items while excluding cancelled workouts."""
     from app.db.session import get_session_factory
     from app.models import Activity, CalendarEvent, PlannedWorkout, User
 
@@ -55,6 +55,13 @@ def test_calendar_returns_custom_events_with_plans_and_activities(client) -> Non
                     workout_type="easy",
                     title="Easy planned",
                     status="planned",
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=datetime(2026, 5, 3, tzinfo=UTC).date(),
+                    workout_type="tempo",
+                    title="Cancelled calendar workout",
+                    status="cancelled",
                 ),
                 Activity(
                     user_id=owner.id,
@@ -82,7 +89,7 @@ def test_calendar_returns_custom_events_with_plans_and_activities(client) -> Non
 
     assert response.status_code == 200
     body = response.json()
-    assert body["planned_workouts"][0]["title"] == "Easy planned"
+    assert [workout["title"] for workout in body["planned_workouts"]] == ["Easy planned"]
     assert body["activities"][0]["name"] == "Completed run"
     assert body["events"][0]["title"] == "Local 10K race"
 

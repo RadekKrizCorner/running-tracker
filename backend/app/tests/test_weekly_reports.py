@@ -9,7 +9,7 @@ from app.tests.conftest import setup_and_login
 
 
 def test_weekly_report_summary_uses_owner_plan_and_activities(client) -> None:
-    """Verify weekly report data uses owner plan and activity totals."""
+    """Verify weekly report uses owner totals without cancelled plan volume."""
     from app.db.session import get_session_factory
     from app.models import User
     from app.services.weekly_report_service import build_weekly_report
@@ -181,6 +181,17 @@ def _seed_weekly_report_data(client) -> None:
                     target_duration_s=5400,
                     target_intensity="easy",
                     status="planned",
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    plan_id=plan.id,
+                    scheduled_date=date(2026, 5, 19),
+                    workout_type="tempo",
+                    title="Zrušené tempo",
+                    target_distance_m=Decimal("100000"),
+                    target_duration_s=18000,
+                    target_intensity="hard",
+                    status="cancelled",
                 ),
             ]
         )

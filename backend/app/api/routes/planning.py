@@ -203,6 +203,7 @@ def _calendar_response(session: DbSession, user: CurrentUser, start_date: date, 
                 PlannedWorkout.user_id == user.id,
                 PlannedWorkout.scheduled_date >= start_date,
                 PlannedWorkout.scheduled_date <= end_date,
+                PlannedWorkout.status != "cancelled",
             )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
         )

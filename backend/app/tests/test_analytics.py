@@ -894,7 +894,7 @@ def test_recent_weeks_split_hr_activity_by_zone_breakdown(client, monkeypatch) -
 
 
 def test_trend_metrics_expose_zone_pace_consistency_plan_and_monotony(client, monkeypatch) -> None:
-    """Verify trend metrics combine HR zones, pace, plans, consistency, and load shape."""
+    """Verify trend metrics combine training signals without cancelled plan volume."""
     import app.services.analytics_service as analytics_service
     import app.services.trend_metrics_service as trend_metrics_service
     from app.db.session import get_session_factory
@@ -961,6 +961,16 @@ def test_trend_metrics_expose_zone_pace_consistency_plan_and_monotony(client, mo
                     target_duration_s=1800,
                     target_distance_m=Decimal("6000"),
                     target_intensity="moderate",
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=date(2026, 4, 28),
+                    workout_type="tempo",
+                    title="Cancelled trend workout",
+                    target_duration_s=7200,
+                    target_distance_m=Decimal("50000"),
+                    target_intensity="hard",
+                    status="cancelled",
                 ),
             ]
         )

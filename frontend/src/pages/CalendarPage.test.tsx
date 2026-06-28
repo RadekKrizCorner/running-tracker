@@ -89,6 +89,9 @@ describe('CalendarPage', () => {
     expect(screen.getByText(/1 completed/i)).toBeInTheDocument();
     expect(screen.getByText(/1 event/i)).toBeInTheDocument();
     expect(screen.getAllByTestId('calendar-day')).toHaveLength(42);
+    const activeDay = screen.getByText('Easy planned').closest('.calendar-day-cell');
+    expect(activeDay).toHaveClass('has-items');
+    expect(within(activeDay as HTMLElement).getByRole('button', { name: /Open/i })).toBeInTheDocument();
   });
 
   test('hides a planned workout when its completed activity is shown', async () => {
