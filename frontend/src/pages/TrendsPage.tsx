@@ -37,7 +37,7 @@ export function TrendsPage() {
   const hasTrendData = (recentWeeks.data?.length ?? 0) > 0 || chartWeekly.length > 0;
 
   return (
-    <div className="page-stack">
+    <div className="page-stack trends-page">
       <header className="visual-page-hero trends">
         <div>
           <p className="eyebrow">{t('trends.eyebrow')}</p>

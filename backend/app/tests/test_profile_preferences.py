@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, timedelta
+
+from app.core.time import week_start
 from app.tests.conftest import setup_and_login
 
 
@@ -16,6 +19,7 @@ def test_owner_preferences_can_be_read_and_updated(client) -> None:
     assert initial.json()["route_start_lat"] is None
     assert initial.json()["route_start_lng"] is None
     assert initial.json()["route_start_label"] is None
+    assert initial.json()["planning_week_start_date"] is None
 
     response = client.patch(
         "/api/v1/profile/preferences",
@@ -48,6 +52,66 @@ def test_owner_preferences_can_be_read_and_updated(client) -> None:
     assert persisted.json()["dashboard_mode"] == "simple"
     assert persisted.json()["route_start_lat"] == 49.2893614
     assert persisted.json()["route_start_lng"] == 16.0977864
+
+
+def test_owner_preferences_store_planning_week_start(client) -> None:
+    """Verify planning range lock is normalized and persisted."""
+    setup_and_login(client)
+
+    response = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": "2026-05-20"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["planning_week_start_date"] == "2026-05-18"
+
+    persisted = client.get("/api/v1/profile/preferences")
+    assert persisted.status_code == 200
+    assert persisted.json()["planning_week_start_date"] == "2026-05-18"
+
+    reset = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": None},
+    )
+
+    assert reset.status_code == 200
+    assert reset.json()["planning_week_start_date"] is None
+
+
+def test_owner_preferences_reject_planning_ranges_outside_supported_history(client) -> None:
+    """Verify planning range starts stay within the supported history window."""
+    setup_and_login(client)
+    current_week = week_start(date.today())
+
+    future = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": (current_week + timedelta(days=7)).isoformat()},
+    )
+    too_old = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": (current_week - timedelta(weeks=105)).isoformat()},
+    )
+
+    assert future.status_code == 422
+    assert too_old.status_code == 422
+
+
+def test_planning_range_uses_owner_local_week_at_timezone_rollover(client, monkeypatch) -> None:
+    """Verify a new local Monday is accepted before the UTC server date rolls over."""
+    setup_and_login(client)
+    monkeypatch.setattr(
+        "app.services.profile_service.utc_now",
+        lambda: datetime(2026, 6, 28, 22, 30, tzinfo=UTC),
+    )
+
+    response = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": "2026-06-29"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["planning_week_start_date"] == "2026-06-29"
 
 
 def test_owner_preferences_persist_avatar_choice(client) -> None:

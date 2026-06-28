@@ -1,7 +1,17 @@
 import { getFormatLocale } from './format';
 
-export function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+export function todayIso(timeZone?: string, value = new Date()) {
+  if (!timeZone) {
+    return toIsoDate(value);
+  }
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(value);
+  const datePart = (type: 'year' | 'month' | 'day') => parts.find((part) => part.type === type)?.value ?? '';
+  return `${datePart('year')}-${datePart('month')}-${datePart('day')}`;
 }
 
 export function toIsoDate(value: Date) {

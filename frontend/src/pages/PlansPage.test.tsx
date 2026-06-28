@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
@@ -12,6 +12,99 @@ import * as PlansPageModule from './PlansPage';
 const { PlansPage } = PlansPageModule;
 
 describe('PlansPage', () => {
+  test('offers Week Outlook and Library views without manual workout completion', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.includes('/workout-templates') || url.includes('/workout-pool') || url.includes('/analytics/weekly')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    }));
+    renderPlansPage();
+
+    const viewControls = await screen.findByRole('group', { name: /Plan view/i });
+    expect(within(viewControls).getByRole('button', { name: /^Week$/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(viewControls).getByRole('button', { name: /^Outlook$/i })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(viewControls).getByRole('button', { name: /^Library$/i })).not.toHaveAttribute('aria-pressed');
+    expect(screen.getByTestId('plan-week-schedule')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /mark complete|complete workout|start workout/i })).not.toBeInTheDocument();
+  });
+
+  test('defers long-term calendar and analytics requests until Outlook is selected', async () => {
+    const currentWeek = weekStartIso();
+    const longTermEnd = addDaysToIso(currentWeek, 83);
+    const plannedOutlookStart = addDaysToIso(currentWeek, -28);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates') || url.includes('/workout-pool') || url.includes('/analytics/')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    await screen.findByRole('heading', { name: /Weekly plan/i });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes(`end_date=${longTermEnd}`))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/analytics/'))).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${currentWeek}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/analytics/weekly?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+    });
+  });
+
+  test('aligns bounded planned and actual Outlook ranges to the same Monday', async () => {
+    const currentWeek = weekStartIso();
+    const lockedStart = addDaysToIso(currentWeek, -104 * 7);
+    const futureHorizon = addDaysToIso(currentWeek, 120 * 7);
+    const longTermEnd = addDaysToIso(futureHorizon, 83);
+    const boundedStart = addDaysToIso(futureHorizon, -104 * 7);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates') || url.includes('/workout-pool') || url.includes('/analytics/')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences({ planning_week_start_date: lockedStart })));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = renderPlansPage();
+
+    await screen.findByRole('heading', { name: /Weekly plan/i });
+    const horizonInput = container.querySelector('.date-controls input[type="date"]') as HTMLInputElement;
+    fireEvent.change(horizonInput, { target: { value: futureHorizon } });
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${boundedStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/analytics/weekly?start_date=${boundedStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+    });
+    expect(new Date(`${boundedStart}T00:00:00Z`).getUTCDay()).toBe(1);
+  });
+
   test('saves a week from a selected workout template', async () => {
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url.includes('/workout-templates')) {
@@ -186,6 +279,101 @@ describe('PlansPage', () => {
         }),
       ]),
     );
+  });
+
+  test('moves a planned long-term day by dragging it onto another day', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    const currentWeek = weekStartIso();
+    const thursday = addDaysToIso(currentWeek, 3);
+    const friday = addDaysToIso(currentWeek, 4);
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      if (url.includes('/calendar/week') && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      if (url.includes('/calendar?')) {
+        return Promise.resolve(
+          jsonResponse({
+            planned_workouts: [plannedWorkout('friday-tempo', friday, 'Friday tempo', 'tempo', 3600, 12000)],
+            activities: [],
+            events: [],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const weekRow = await screen.findByTestId(`long-term-week-${currentWeek}`);
+    await waitFor(() => expect(within(weekRow).getByRole('button', { name: /Open Fri, Friday tempo/i })).toBeInTheDocument());
+    const fridayButton = within(weekRow).getByRole('button', { name: /Open Fri, Friday tempo/i });
+    const thursdayButton = within(weekRow).getByRole('button', { name: /Open Thu, Unscheduled/i });
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(fridayButton, { dataTransfer });
+    fireEvent.dragOver(thursdayButton, { dataTransfer });
+    fireEvent.drop(thursdayButton, { dataTransfer });
+    fireEvent.dragEnd(fridayButton, { dataTransfer });
+
+    expect(within(weekRow).getByRole('button', { name: /Open Thu, Friday tempo/i })).toBeInTheDocument();
+    expect(within(weekRow).getByRole('button', { name: /Open Fri, Unscheduled/i })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Save week/i }));
+
+    await waitFor(() => expect(calls.some(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST')).toBe(true));
+    const saveCall = calls.find(([url, init]) => url.includes('/calendar/week') && init?.method === 'POST');
+    const body = JSON.parse(String(saveCall?.[1]?.body));
+
+    expect(body.week_start_date).toBe(currentWeek);
+    expect(body.workouts).toEqual([
+      expect.objectContaining({
+        scheduled_date: thursday,
+        title: 'Friday tempo',
+        workout_type: 'tempo',
+        target_duration_s: 3600,
+        target_distance_m: 12000,
+      }),
+    ]);
+  });
+
+  test('moves a planned day across week boundaries with keyboard and touch accessible controls', async () => {
+    const currentWeek = weekStartIso();
+    const sunday = addDaysToIso(currentWeek, 6);
+    const nextWeek = addDaysToIso(currentWeek, 7);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      if (url.includes('/calendar?')) {
+        return Promise.resolve(jsonResponse({
+          planned_workouts: [plannedWorkout('sunday-tempo', sunday, 'Sunday tempo', 'tempo', 3600, 12000)],
+          activities: [],
+          events: [],
+        }));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const currentWeekRow = await screen.findByTestId(`long-term-week-${currentWeek}`);
+    const nextWeekRow = await screen.findByTestId(`long-term-week-${nextWeek}`);
+    await waitFor(() => expect(within(currentWeekRow).getByRole('button', { name: /Open Sun, Sunday tempo/i })).toBeInTheDocument());
+
+    await userEvent.click(within(currentWeekRow).getByRole('button', { name: /Move Sunday tempo to next day/i }));
+
+    expect(within(currentWeekRow).getByRole('button', { name: /Open Sun, Unscheduled/i })).toBeInTheDocument();
+    expect(within(nextWeekRow).getByRole('button', { name: /Open Mon, Sunday tempo/i })).toBeInTheDocument();
   });
 
   test('shows favorite templates in day editor quick actions and applies them', async () => {
@@ -641,9 +829,10 @@ describe('PlansPage', () => {
     const currentWeek = weekStartIso();
     const nextWeek = weekStartIso(addDaysToIso(currentWeek, 7));
     const nextTuesday = addDaysToIso(nextWeek, 1);
+    const plannedOutlookStart = addDaysToIso(currentWeek, -28);
     const longTermEnd = addDaysToIso(currentWeek, 83);
     const fetchMock = vi.fn((url: string) => {
-      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+      if (url.includes('/analytics/weekly?')) {
         return Promise.resolve(
           jsonResponse([
             weeklyMetric(addDaysToIso(currentWeek, -14), 82, 18000, 7200),
@@ -666,10 +855,20 @@ describe('PlansPage', () => {
           }),
         );
       }
+      if (url.includes(`/calendar?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`)) {
+        return Promise.resolve(
+          jsonResponse({
+            planned_workouts: [plannedWorkout('future-long', nextTuesday, 'Long run', 'long', 5400, 14000)],
+            activities: [],
+            events: [],
+          }),
+        );
+      }
       return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
     });
     vi.stubGlobal('fetch', fetchMock);
     renderPlansPage();
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
 
     expect(await screen.findByRole('heading', { name: /Long-term plan/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Mileage and time outlook/i })).toBeInTheDocument();
@@ -687,6 +886,217 @@ describe('PlansPage', () => {
     expect(futureWeekRow.querySelector('.long-term-summary-distance')).toHaveTextContent('14.0 km');
     expect(futureWeekRow.querySelector('.long-term-summary-time')).toHaveTextContent('1h 30m');
     expect(within(futureWeekRow).getByRole('button', { name: /Open Tue, Long run/i })).toHaveClass('long-term-day-button');
+  });
+
+  test('loads four past weeks for planned outlook without rendering them in the long-term plan', async () => {
+    const currentWeek = weekStartIso();
+    const plannedOutlookStart = addDaysToIso(currentWeek, -28);
+    const longTermEnd = addDaysToIso(currentWeek, 83);
+    const nextWeek = weekStartIso(addDaysToIso(currentWeek, 7));
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/analytics/weekly?')) {
+        return Promise.resolve(jsonResponse([weeklyMetric(plannedOutlookStart, 82, 18000, 5400)]));
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      if (url.includes(`/calendar?start_date=${currentWeek}&end_date=${longTermEnd}`)) {
+        return Promise.resolve(
+          jsonResponse({
+            planned_workouts: [
+              plannedWorkout('future-long', addDaysToIso(nextWeek, 1), 'Long run', 'long', 5400, 14000),
+            ],
+            activities: [],
+            events: [],
+          }),
+        );
+      }
+      if (url.includes(`/calendar?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`)) {
+        return Promise.resolve(
+          jsonResponse({
+            planned_workouts: [
+              plannedWorkout('past-planned', addDaysToIso(plannedOutlookStart, 1), 'Past tempo', 'tempo', 3600, 12000),
+              plannedWorkout('future-long', addDaysToIso(nextWeek, 1), 'Long run', 'long', 5400, 14000),
+            ],
+            activities: [],
+            events: [],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
+
+    expect(await screen.findByRole('heading', { name: /Long-term plan/i })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+    });
+    expect(screen.getByTestId(`long-term-week-${currentWeek}`)).toBeInTheDocument();
+    expect(screen.queryByTestId(`long-term-week-${plannedOutlookStart}`)).not.toBeInTheDocument();
+
+    const futureWeekRow = await screen.findByTestId(`long-term-week-${nextWeek}`);
+    expect(within(futureWeekRow).getByText('Long run')).toBeInTheDocument();
+  });
+
+  test('uses the saved planning range lock for outlook analytics without rendering locked past weeks', async () => {
+    const currentWeek = weekStartIso();
+    const lockedStart = addDaysToIso(currentWeek, -42);
+    const longTermEnd = addDaysToIso(currentWeek, 83);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes(`/analytics/weekly?start_date=${lockedStart}&end_date=${longTermEnd}`)) {
+        return Promise.resolve(jsonResponse([weeklyMetric(lockedStart, 82, 18000, 5400)]));
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences({ planning_week_start_date: lockedStart })));
+      }
+      if (url.includes(`/calendar?start_date=${lockedStart}&end_date=${longTermEnd}`)) {
+        return Promise.resolve(
+          jsonResponse({
+            planned_workouts: [
+              plannedWorkout('locked-past-planned', addDaysToIso(lockedStart, 1), 'Plan start tempo', 'tempo', 3600, 12000),
+            ],
+            activities: [],
+            events: [],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
+
+    expect(await screen.findByRole('heading', { name: /Long-term plan/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText(/Plan range start/i)).toHaveValue(lockedStart));
+    expect(screen.getByText(new RegExp(`Data from week ${formatShortDate(lockedStart)}`, 'i'))).toBeInTheDocument();
+    expect(screen.queryByTestId(`long-term-week-${lockedStart}`)).not.toBeInTheDocument();
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/analytics/weekly?start_date=${lockedStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${lockedStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${currentWeek}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+    });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/analytics/recent-weeks'))).toBe(false);
+  });
+
+  test('never requests an inverted calendar or analytics range when the horizon precedes a saved lock', async () => {
+    const currentWeek = weekStartIso();
+    const historicalHorizon = addDaysToIso(currentWeek, -140);
+    const historicalEnd = addDaysToIso(historicalHorizon, 83);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences({ planning_week_start_date: currentWeek })));
+      }
+      if (url.includes('/analytics/')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = renderPlansPage();
+
+    await screen.findByRole('heading', { name: /Long-term plan/i });
+    const horizonInput = container.querySelector('.date-controls input[type="date"]') as HTMLInputElement;
+    expect(horizonInput).not.toBeNull();
+    fireEvent.change(horizonInput, { target: { value: historicalHorizon } });
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${historicalHorizon}&end_date=${historicalEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+    });
+    expect(fetchMock.mock.calls.some(([url]) => hasInvertedDateRange(String(url)))).toBe(false);
+  });
+
+  test('saves and resets the planning range lock from the page header', async () => {
+    const currentWeek = weekStartIso();
+    const selectedDate = addDaysToIso(currentWeek, -12);
+    const expectedWeekStart = weekStartIso(selectedDate);
+    const preferenceBodies: unknown[] = [];
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/profile/preferences') && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body));
+        preferenceBodies.push(body);
+        return Promise.resolve(jsonResponse(defaultPreferences(body)));
+      }
+      if (url.includes('/analytics/weekly?')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/workout-templates')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    const rangeInput = await screen.findByLabelText(/Plan range start/i);
+    expect(rangeInput).toHaveAttribute('max', currentWeek);
+    expect(rangeInput).toHaveAttribute('min', addDaysToIso(currentWeek, -104 * 7));
+    await userEvent.clear(rangeInput);
+    await userEvent.type(rangeInput, selectedDate);
+    await userEvent.click(screen.getByRole('button', { name: /Lock range/i }));
+
+    await waitFor(() => expect(preferenceBodies).toContainEqual({ planning_week_start_date: expectedWeekStart }));
+    expect(rangeInput).toHaveValue(expectedWeekStart);
+
+    await userEvent.click(screen.getByRole('button', { name: /Reset range/i }));
+
+    await waitFor(() => expect(preferenceBodies).toContainEqual({ planning_week_start_date: null }));
+  });
+
+  test('blocks planning range dates outside the supported history window', async () => {
+    const currentWeek = weekStartIso();
+    const preferenceBodies: unknown[] = [];
+    vi.stubGlobal('fetch', vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/profile/preferences') && init?.method === 'PATCH') {
+        preferenceBodies.push(JSON.parse(String(init.body)));
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      if (url.includes('/workout-templates') || url.includes('/workout-pool') || url.includes('/analytics/weekly')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    }));
+    renderPlansPage();
+
+    const rangeInput = await screen.findByLabelText(/Plan range start/i);
+    await userEvent.clear(rangeInput);
+    await userEvent.type(rangeInput, addDaysToIso(currentWeek, 7));
+
+    expect(screen.getByRole('button', { name: /Lock range/i })).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/between/i);
+    expect(preferenceBodies).toEqual([]);
   });
 
   test('groups actual and planned volume outlook values by the same week start date', () => {
@@ -753,6 +1163,74 @@ describe('PlansPage', () => {
     expect(source).toMatch(/<Line[\s\S]*dataKey="planned_time_h"/);
   });
 
+  test('keeps planning outlook trend lines out of tooltip payloads', () => {
+    const source = readFileSync('src/pages/PlansPage.tsx', 'utf8');
+    const planningOutlookSource = source.slice(source.indexOf('function PlanningVolumeOutlookChart'), source.indexOf('export function buildPlanningVolumeOutlookData'));
+    const lineTooltipOptOuts = planningOutlookSource.match(/<Line[\s\S]*?tooltipType="none"[\s\S]*?\/>/g) ?? [];
+
+    expect(lineTooltipOptOuts).toHaveLength(4);
+  });
+
+  test('splits planning gap shading where actual and planned lines cross', () => {
+    const buildPlanningGapSegments = (
+      PlansPageModule as typeof PlansPageModule & {
+        buildPlanningGapSegments?: (points: Array<{
+          x: number;
+          actualY: number;
+          plannedY: number;
+          actualValue: number;
+          plannedValue: number;
+        } | null>) => Array<{ tone: string; points: Array<{ x: number; y: number }> }>;
+      }
+    ).buildPlanningGapSegments;
+
+    expect(typeof buildPlanningGapSegments).toBe('function');
+    if (typeof buildPlanningGapSegments !== 'function') {
+      return;
+    }
+
+    const segments = buildPlanningGapSegments([
+      { x: 0, actualY: 20, plannedY: 40, actualValue: 30, plannedValue: 20 },
+      { x: 10, actualY: 60, plannedY: 30, actualValue: 10, plannedValue: 25 },
+    ]);
+
+    expect(segments).toEqual([
+      {
+        tone: 'above',
+        points: [
+          { x: 0, y: 20 },
+          { x: 4, y: 36 },
+          { x: 0, y: 40 },
+        ],
+      },
+      {
+        tone: 'below',
+        points: [
+          { x: 4, y: 36 },
+          { x: 10, y: 60 },
+          { x: 10, y: 30 },
+        ],
+      },
+    ]);
+
+    expect(
+      buildPlanningGapSegments([
+        { x: 0, actualY: 20, plannedY: 40, actualValue: 30, plannedValue: 20 },
+        null,
+        { x: 10, actualY: 60, plannedY: 30, actualValue: 10, plannedValue: 25 },
+      ]),
+    ).toEqual([]);
+  });
+
+  test('renders hatched planning gap overlays in the mileage and time outlook charts', () => {
+    const source = readFileSync('src/pages/PlansPage.tsx', 'utf8');
+    const mileageChartSource = source.slice(source.indexOf("<h3>{t('plans.mileage')}</h3>"), source.indexOf("<h3>{t('plans.timeChart')}</h3>"));
+    const timeChartSource = source.slice(source.indexOf("<h3>{t('plans.timeChart')}</h3>"), source.indexOf("<small>{t('plans.actualPlannedVolume')}</small>"));
+
+    expect(mileageChartSource).toMatch(/<PlanningGapOverlay[\s\S]*actualValueKey="actual_distance_km"[\s\S]*plannedValueKey="planned_distance_km"/);
+    expect(timeChartSource).toMatch(/<PlanningGapOverlay[\s\S]*actualValueKey="actual_time_h"[\s\S]*plannedValueKey="planned_time_h"/);
+  });
+
   test('maps rest recovery long run and race plan types to the updated long-term colors', () => {
     const css = readFileSync('src/styles.css', 'utf8');
 
@@ -776,7 +1254,7 @@ describe('PlansPage', () => {
 
   test('keeps simplified long-term planning controls on the main page', async () => {
     const fetchMock = vi.fn((url: string) => {
-      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+      if (url.includes('/analytics/weekly?')) {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes('/workout-templates')) {
@@ -806,13 +1284,14 @@ describe('PlansPage', () => {
     const currentWeek = weekStartIso();
     const futureWeek = weekStartIso(addDaysToIso(currentWeek, 14));
     const futureWednesday = addDaysToIso(futureWeek, 2);
+    const plannedOutlookStart = addDaysToIso(currentWeek, -28);
     const longTermEnd = addDaysToIso(currentWeek, 83);
     const fetchMock = vi.fn((url: string, init?: RequestInit) => {
       calls.push([url, init]);
       if (url.includes('/calendar/week') && init?.method === 'POST') {
         return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
       }
-      if (url.includes('/analytics/recent-weeks?weeks=6')) {
+      if (url.includes('/analytics/weekly?')) {
         return Promise.resolve(jsonResponse([]));
       }
       if (url.includes('/workout-templates')) {
@@ -821,7 +1300,7 @@ describe('PlansPage', () => {
       if (url.includes('/profile/preferences')) {
         return Promise.resolve(jsonResponse(defaultPreferences()));
       }
-      if (url.includes(`/calendar?start_date=${currentWeek}&end_date=${longTermEnd}`)) {
+      if (url.includes(`/calendar?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`)) {
         return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
       }
       return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
@@ -859,13 +1338,23 @@ describe('PlansPage', () => {
 
 function renderPlansPage(initialLocale: AppLocale = 'en-US') {
   const queryClient = new QueryClient();
-  render(
+  return render(
     <QueryClientProvider client={queryClient}>
       <LanguageProvider initialLocale={initialLocale}>
         <PlansPage />
       </LanguageProvider>
     </QueryClientProvider>,
   );
+}
+
+function hasInvertedDateRange(url: string) {
+  if (!url.includes('/calendar?') && !url.includes('/analytics/weekly?')) {
+    return false;
+  }
+  const parsed = new URL(url, 'http://localhost');
+  const startDate = parsed.searchParams.get('start_date');
+  const endDate = parsed.searchParams.get('end_date');
+  return Boolean(startDate && endDate && startDate > endDate);
 }
 
 async function openLongTermDay(dayName = 'Mon', weekStart = weekStartIso(), buttonName: RegExp | null = null, dialogName: RegExp | null = null) {
@@ -894,13 +1383,38 @@ function jsonResponse(body: unknown) {
   };
 }
 
-function defaultPreferences() {
+function createDataTransfer() {
+  const store = new Map<string, string>();
+  return {
+    dropEffect: 'move',
+    effectAllowed: 'move',
+    getData: (key: string) => store.get(key) ?? '',
+    setData: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    clearData: () => {
+      store.clear();
+    },
+  };
+}
+
+function defaultPreferences(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     locale: 'cs-CZ',
     dashboard_mode: 'advanced',
     favorite_template_ids: [],
     recent_template_ids: [],
     pace_zones: [],
+    elevation_correction_enabled: false,
+    elevation_correction_mode: 'only_when_zero',
+    elevation_provider_url: null,
+    avatar_icon: null,
+    avatar_image_data_url: null,
+    route_start_lat: null,
+    route_start_lng: null,
+    route_start_label: null,
+    planning_week_start_date: null,
+    ...overrides,
   };
 }
 

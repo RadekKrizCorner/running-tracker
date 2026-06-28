@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Mountain, Route, TrendingUp } from 'lucide-react';
 import { IntensityChart, WeeklyDistanceChart, WeeklyLoadChart } from '../components/charts/WeeklyCharts';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -6,6 +6,8 @@ import { MetricCard } from '../components/ui/MetricCard';
 import { ProgressMeter } from '../components/ui/ProgressMeter';
 import { StatusPill } from '../components/ui/StatusPill';
 import { RunnerScene } from '../components/visuals/RunnerScene';
+import { TodayBrief } from '../components/dashboard/TodayBrief';
+import { useMe } from '../features/auth/api';
 import {
   useStravaStatus,
   useStravaSync,
@@ -18,6 +20,7 @@ import { useHeartRateZones, useUserPreferences } from '../features/profile/api';
 import type { StravaSyncJobStatus, SyncProgress, WeekPlanComparison, WeekPlanRow } from '../lib/api/types';
 import { formatDate, formatDistance, formatDuration, formatWeekdayDate, formatWeekRange } from '../lib/format';
 import { enumLabel, useTranslation } from '../lib/i18n';
+import { useOwnerToday } from '../lib/useOwnerToday';
 
 type DashboardMode = 'simple' | 'advanced';
 
@@ -25,7 +28,11 @@ export function DashboardPage() {
   const { t } = useTranslation();
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
   const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(null);
-  const dashboard = useDashboard('week', selectedWeekStart ?? undefined);
+  const me = useMe();
+  const today = useOwnerToday(me.data?.timezone);
+  const dashboard = useDashboard('week');
+  const previousToday = useRef(today);
+  const selectedWeekDashboard = useDashboard('week', selectedWeekStart ?? undefined);
   const strava = useStravaStatus();
   const hrZones = useHeartRateZones();
   const preferences = useUserPreferences();
@@ -44,27 +51,85 @@ export function DashboardPage() {
     }
   }, [strava.data?.active_job_id]);
 
-  if (dashboard.isLoading || strava.isLoading || preferences.isLoading) {
+  useEffect(() => {
+    if (previousToday.current === today) {
+      return;
+    }
+    previousToday.current = today;
+    void dashboard.refetch();
+  }, [dashboard.refetch, today]);
+
+  if (dashboard.isLoading || selectedWeekDashboard.isLoading || strava.isLoading || preferences.isLoading) {
     return <div className="screen-center">{t('common.loadingDashboard')}</div>;
   }
 
   const data = dashboard.data;
+  const selectedWeekPlan = selectedWeekDashboard.data?.week_plan ?? data?.week_plan;
   const noActivities = !data || data.recent_activities.length === 0;
 
   return (
     <div className="page-stack dashboard-page">
-      <section className="metric-grid">
-        <MetricCard label={t('common.distance')} value={formatDistance(data?.this_week.distance_m)} detail={t('dashboard.thisWeek')} />
+      <TodayBrief data={data} today={today} />
+
+      <section className="metric-grid dashboard-secondary-metrics" aria-label={t('dashboard.supportingMetrics')}>
         <MetricCard label={t('dashboard.movingTime')} value={formatDuration(data?.this_week.moving_time_s)} detail={t('dashboard.thisWeek')} />
-        <MetricCard label={t('dashboard.runs')} value={`${data?.this_week.run_count ?? 0}`} detail={t('common.completed')} />
         <MetricCard label={t('dashboard.longestRun')} value={formatDistance(data?.this_week.longest_run_m)} detail={t('dashboard.thisWeek')} />
         {dashboardMode === 'advanced' ? (
-          <>
-            <MetricCard label={t('common.load')} value={`${Math.round(data?.this_week.load ?? 0)}`} detail={t('dashboard.transparentEstimate')} />
-            <MetricCard label={t('common.elevation')} value={`${Math.round(data?.this_week.elevation_gain_m ?? 0)} m`} detail={t('dashboard.gain')} />
-          </>
+          <MetricCard label={t('common.elevation')} value={`${Math.round(data?.this_week.elevation_gain_m ?? 0)} m`} detail={t('dashboard.gain')} />
         ) : null}
       </section>
+
+      {dashboardMode === 'advanced' ? (
+        <section className="chart-grid">
+          <WeeklyDistanceChart weekly={data?.weekly ?? []} />
+          <WeeklyLoadChart weekly={data?.weekly ?? []} />
+          <IntensityChart weekly={data?.weekly ?? []} />
+        </section>
+      ) : null}
+
+      <section className="split-grid">
+        <div className="panel">
+          <h2>{t('dashboard.recentActivities')}</h2>
+          <div className="list-stack">
+            {(data?.recent_activities ?? []).map((activity) => (
+              <a className="activity-row" key={activity.id} href={`/activities/${activity.id}`}>
+                <Route size={18} />
+                <div>
+                  <strong>{activity.name ?? t('activity.run')}</strong>
+                  <span>{formatDistance(activity.distance_m)} · {formatDuration(activity.moving_time_s)}</span>
+                  <small className="activity-provider">{t('activities.syncedFromStrava')}</small>
+                </div>
+                <small>{enumLabel(t, 'intensity', activity.intensity_class ?? 'unknown')}</small>
+              </a>
+            ))}
+          </div>
+        </div>
+        <div className="panel">
+          <h2>{t('dashboard.upcomingWorkouts')}</h2>
+          <div className="list-stack">
+            {(data?.upcoming_workouts ?? []).map((workout) => (
+              <div className="activity-row" key={workout.id ?? `${workout.scheduled_date}-${workout.title}`}>
+                <Clock size={18} />
+                <div>
+                  <strong>{workout.title}</strong>
+                  <span>{formatDate(workout.scheduled_date)} · {enumLabel(t, 'intensity', workout.target_intensity ?? 'free')}</span>
+                </div>
+                <small>{enumLabel(t, 'status', workout.status)}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {selectedWeekPlan ? (
+        <WeekPlanPanel
+          weekPlan={selectedWeekPlan}
+          isShifted={selectedWeekStart !== null}
+          onPreviousWeek={() => setSelectedWeekStart(addWeeksIso(selectedWeekPlan.week_start_date, -1))}
+          onCurrentWeek={() => setSelectedWeekStart(null)}
+          onNextWeek={() => setSelectedWeekStart(addWeeksIso(selectedWeekPlan.week_start_date, 1))}
+        />
+      ) : null}
 
       {strava.data?.connected ? (
         <div className="header-actions dashboard-sync-actions">
@@ -144,59 +209,7 @@ export function DashboardPage() {
         }
       />
 
-      {data?.week_plan ? (
-        <WeekPlanPanel
-          weekPlan={data.week_plan}
-          isShifted={selectedWeekStart !== null}
-          onPreviousWeek={() => setSelectedWeekStart(addWeeksIso(data.week_plan.week_start_date, -1))}
-          onCurrentWeek={() => setSelectedWeekStart(null)}
-          onNextWeek={() => setSelectedWeekStart(addWeeksIso(data.week_plan.week_start_date, 1))}
-        />
-      ) : null}
-
-      {dashboardMode === 'advanced' ? (
-        <>
-          <section className="chart-grid">
-            <WeeklyDistanceChart weekly={data?.weekly ?? []} />
-            <WeeklyLoadChart weekly={data?.weekly ?? []} />
-            <IntensityChart weekly={data?.weekly ?? []} />
-          </section>
-          <AnalyticsGlossary />
-        </>
-      ) : null}
-
-      <section className="split-grid">
-        <div className="panel">
-          <h2>{t('dashboard.recentActivities')}</h2>
-          <div className="list-stack">
-            {(data?.recent_activities ?? []).map((activity) => (
-              <a className="activity-row" key={activity.id} href={`/activities/${activity.id}`}>
-                <Route size={18} />
-                <div>
-                  <strong>{activity.name ?? t('activity.run')}</strong>
-                  <span>{formatDistance(activity.distance_m)} · {formatDuration(activity.moving_time_s)}</span>
-                </div>
-                <small>{enumLabel(t, 'intensity', activity.intensity_class ?? 'unknown')}</small>
-              </a>
-            ))}
-          </div>
-        </div>
-        <div className="panel">
-          <h2>{t('dashboard.upcomingWorkouts')}</h2>
-          <div className="list-stack">
-            {(data?.upcoming_workouts ?? []).map((workout) => (
-              <div className="activity-row" key={workout.id ?? `${workout.scheduled_date}-${workout.title}`}>
-                <Clock size={18} />
-                <div>
-                  <strong>{workout.title}</strong>
-                  <span>{formatDate(workout.scheduled_date)} · {enumLabel(t, 'intensity', workout.target_intensity ?? 'free')}</span>
-                </div>
-                <small>{enumLabel(t, 'status', workout.status)}</small>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {dashboardMode === 'advanced' ? <AnalyticsGlossary /> : null}
 
       <section className="insight-strip">
         <TrendingUp size={18} />

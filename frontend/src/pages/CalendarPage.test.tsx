@@ -1,12 +1,35 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { addDaysToIso, weekStartIso } from '../lib/date';
 import { LanguageProvider } from '../lib/i18n';
 import { CalendarPage } from './CalendarPage';
 
 describe('CalendarPage', () => {
+  test('keeps the default month board visible at the mobile breakpoint', () => {
+    const styles = readFileSync('src/styles/pages.css', 'utf8');
+
+    expect(styles).toMatch(/\.calendar-board\.month\s+\.calendar-day-cell\s*\{/);
+    expect(styles).not.toMatch(/\.calendar-board\.month\s+\.calendar-day\s*\{/);
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s*\{[\s\S]*?display:\s*grid;/,
+    );
+    expect(styles).not.toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s*\{\s*display:\s*none;/,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s*\{[^}]*grid-template-columns:\s*repeat\(7,\s*minmax\(0,\s*1fr\)\);/,
+    );
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.calendar-board\.month\s+\.calendar-day-cell\s*\{[^}]*min-height:\s*56px;/,
+    );
+    expect(styles).toMatch(
+      /\.calendar-board\.month\s+\.calendar-day-cell:has\(\.calendar-open-day:focus-visible\)\s*\{[^}]*outline:/,
+    );
+  });
+
   test('renders planned workouts, completed activities, and custom events', async () => {
     const weekStart = weekStartIso();
     const workoutDate = addDaysToIso(weekStart, 1);
@@ -66,6 +89,9 @@ describe('CalendarPage', () => {
     expect(screen.getByText(/1 completed/i)).toBeInTheDocument();
     expect(screen.getByText(/1 event/i)).toBeInTheDocument();
     expect(screen.getAllByTestId('calendar-day')).toHaveLength(42);
+    const activeDay = screen.getByText('Easy planned').closest('.calendar-day-cell');
+    expect(activeDay).toHaveClass('has-items');
+    expect(within(activeDay as HTMLElement).getByRole('button', { name: /Open/i })).toBeInTheDocument();
   });
 
   test('hides a planned workout when its completed activity is shown', async () => {

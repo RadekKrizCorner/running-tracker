@@ -187,6 +187,7 @@ def _planned_workouts(
                 PlannedWorkout.user_id == user_id,
                 PlannedWorkout.scheduled_date >= report_week_start,
                 PlannedWorkout.scheduled_date <= report_week_end,
+                PlannedWorkout.status != "cancelled",
             )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
         )

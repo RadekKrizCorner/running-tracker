@@ -48,7 +48,7 @@ function EventDetail({
   const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   return (
-    <div className="page-stack">
+    <div className="page-stack event-detail-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">{t('events.detailEyebrow')}</p>

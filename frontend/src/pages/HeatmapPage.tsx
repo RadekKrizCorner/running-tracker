@@ -53,7 +53,7 @@ export function HeatmapPage() {
   };
 
   return (
-    <div className="page-stack">
+    <div className="page-stack heatmap-page">
       <header className="visual-page-hero heatmap">
         <div>
           <p className="eyebrow">{t('heatmap.eyebrow')}</p>
@@ -67,6 +67,27 @@ export function HeatmapPage() {
         </div>
         <RunnerScene variant="heatmap" label={t('heatmap.title')} />
       </header>
+      <section className="panel heatmap-map-panel">
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">{t('heatmap.repeatedRoutes')}</p>
+            <h2>{t('heatmap.panelTitle')}</h2>
+          </div>
+          {data ? <span className="badge">{data.activity_count} {t('heatmap.withGps')}</span> : null}
+        </div>
+        {data && data.points.length > 0 ? (
+          <>
+            <RunHeatmap points={data.points} bounds={data.bounds} />
+            <p className="helper-text">{t('heatmap.help', { samples: data.point_count, runs: data.activity_count })}</p>
+          </>
+        ) : (
+          <EmptyState
+            title={t('heatmap.empty')}
+            detail={t('heatmap.emptyDetail')}
+            visual={<RunnerScene variant="heatmap" />}
+          />
+        )}
+      </section>
       <section className="metric-grid">
         <MetricCard label={t('heatmap.runsWithGps')} value={`${data?.activity_count ?? 0}`} detail={t('heatmap.importedActivities')} />
         <MetricCard label={t('heatmap.gpsSamples')} value={`${data?.point_count ?? 0}`} detail={t('heatmap.aggregatedPoints')} />
@@ -116,27 +137,6 @@ export function HeatmapPage() {
           </label>
         </div>
         <p className="helper-text">{t('heatmap.rangeHelp')}</p>
-      </section>
-      <section className="panel">
-        <div className="panel-heading">
-          <div>
-            <p className="eyebrow">{t('heatmap.repeatedRoutes')}</p>
-            <h2>{t('heatmap.panelTitle')}</h2>
-          </div>
-          {data ? <span className="badge">{data.activity_count} {t('heatmap.withGps')}</span> : null}
-        </div>
-        {data && data.points.length > 0 ? (
-          <>
-            <RunHeatmap points={data.points} bounds={data.bounds} />
-            <p className="helper-text">{t('heatmap.help', { samples: data.point_count, runs: data.activity_count })}</p>
-          </>
-        ) : (
-          <EmptyState
-            title={t('heatmap.empty')}
-            detail={t('heatmap.emptyDetail')}
-            visual={<RunnerScene variant="heatmap" />}
-          />
-        )}
       </section>
     </div>
   );

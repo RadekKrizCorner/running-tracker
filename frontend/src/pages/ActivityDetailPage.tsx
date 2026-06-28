@@ -101,6 +101,7 @@ export function ActivityDetailPage() {
                 data={chartData.pace}
                 color="#2f66d0"
                 formatter={formatPaceValue}
+                chartFormatter={formatPaceChartValue}
                 domainOptions={PACE_DOMAIN_OPTIONS}
                 yAxisWidth={78}
                 onHighlightProgress={setHighlightProgress}
@@ -283,6 +284,7 @@ type ChartPoint = {
   index: number;
   progress: number;
   value: number;
+  chartValue?: number;
 };
 
 type VelocityPaceSample = {
@@ -333,7 +335,7 @@ function numericSeries(values: unknown[]): ChartPoint[] {
 function paceSeries(distance: unknown[], time: unknown[], velocity: unknown[], moving: unknown[]): ChartPoint[] {
   const velocitySamples = velocityPaceSamples(distance, velocity, moving);
   if (velocitySamples.length > 0) {
-    return limitPacePoints(smoothedVelocityPacePoints(readableVelocitySamples(velocitySamples)));
+    return withPaceChartValues(limitPacePoints(smoothedVelocityPacePoints(readableVelocitySamples(velocitySamples))));
   }
   if (distance.length > 1 && time.length > 1) {
     const totalDistance = distanceTotal(distance);
@@ -357,7 +359,7 @@ function paceSeries(distance: unknown[], time: unknown[], velocity: unknown[], m
         return { index, progress: totalDistance > 0 ? value / totalDistance : progressForIndex(index, distance.length), value: deltaSeconds / 60 / deltaKm };
       })
       .filter((point): point is ChartPoint => point !== null);
-    return limitPacePoints(smoothedPacePoints(readablePacePoints(deltaPoints)));
+    return withPaceChartValues(limitPacePoints(smoothedPacePoints(readablePacePoints(deltaPoints))));
   }
   return [];
 }
@@ -427,6 +429,15 @@ function limitPacePoints(points: ChartPoint[]): ChartPoint[] {
   return points.filter((_, index) => index % step === 0 || index === points.length - 1);
 }
 
+function withPaceChartValues(points: ChartPoint[]): ChartPoint[] {
+  return points.map((point) => ({ ...point, chartValue: paceChartValue(point.value) }));
+}
+
+function paceChartValue(minutesPerKm: number) {
+  // Plot pace as speed-equivalent km/h so faster samples rise while labels stay in min/km.
+  return minutesPerKm > 0 && Number.isFinite(minutesPerKm) ? 60 / minutesPerKm : 0;
+}
+
 function paceMinutesPerKmForSpeed(speedMps: number) {
   return 1000 / speedMps / 60;
 }
@@ -459,7 +470,7 @@ function distanceTotal(distance: unknown[]) {
 }
 
 export function chartValueDomain(data: ChartPoint[], options: ChartDomainOptions): [number, number] {
-  const values = data.map((point) => point.value).filter((value) => Number.isFinite(value)).sort((left, right) => left - right);
+  const values = data.map(chartValueForPoint).filter((value) => Number.isFinite(value)).sort((left, right) => left - right);
   if (values.length === 0) {
     return [0, options.minSpan];
   }
@@ -499,6 +510,10 @@ function roundDomainValue(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+function chartValueForPoint(point: ChartPoint) {
+  return Number.isFinite(point.chartValue) ? Number(point.chartValue) : point.value;
+}
+
 function heartRateZoneStyle(index: number) {
   const colors = ['#256f5b', '#5d8f3f', '#d17b0f', '#bf6b2f', '#bf3b45'];
   return { background: colors[index] ?? '#8b9790' };
@@ -509,6 +524,7 @@ function MiniStreamChart({
   data,
   color,
   formatter,
+  chartFormatter,
   domainOptions,
   yAxisWidth,
   onHighlightProgress,
@@ -517,12 +533,15 @@ function MiniStreamChart({
   data: ChartPoint[];
   color: string;
   formatter: (value: number) => string;
+  chartFormatter?: (value: number) => string;
   domainOptions: ChartDomainOptions;
   yAxisWidth: number;
   onHighlightProgress: (progress: number | null) => void;
 }) {
   const { t } = useTranslation();
   const domain = useMemo(() => chartValueDomain(data, domainOptions), [data, domainOptions]);
+  const plottedData = useMemo(() => data.map((point) => ({ ...point, chartValue: chartValueForPoint(point) })), [data]);
+  const displayFormatter = chartFormatter ?? formatter;
   return (
     <div className="mini-stream-chart" onMouseLeave={() => onHighlightProgress(null)}>
       <div className="chart-legend compact">
@@ -532,12 +551,12 @@ function MiniStreamChart({
       {data.length > 0 ? (
         <ResponsiveContainer width="100%" height={140}>
           <LineChart
-            data={data}
+            data={plottedData}
             margin={{ top: 6, right: 8, bottom: 0, left: 0 }}
             onMouseLeave={() => onHighlightProgress(null)}
             onMouseMove={(state) => {
               const index = Number(state.activeTooltipIndex);
-              const point = Number.isFinite(index) ? data[index] : null;
+              const point = Number.isFinite(index) ? plottedData[index] : null;
               if (isChartPoint(point)) {
                 onHighlightProgress(point.progress);
               }
@@ -549,11 +568,11 @@ function MiniStreamChart({
               domain={domain}
               allowDataOverflow={Boolean(domainOptions.clipOutliers)}
               tickCount={4}
-              tickFormatter={(value) => formatter(Number(value))}
+              tickFormatter={(value) => displayFormatter(Number(value))}
               tickMargin={8}
             />
-            <Tooltip formatter={(value) => formatter(Number(value))} labelFormatter={() => title} />
-            <Line dataKey="value" stroke={color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+            <Tooltip formatter={(value) => displayFormatter(Number(value))} labelFormatter={() => title} />
+            <Line dataKey="chartValue" stroke={color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
       ) : (
@@ -569,4 +588,8 @@ function isChartPoint(value: unknown): value is ChartPoint {
 
 function formatPaceValue(value: number) {
   return formatPaceSeconds(value * 60);
+}
+
+function formatPaceChartValue(value: number) {
+  return formatPaceValue(value > 0 ? 60 / value : 0);
 }

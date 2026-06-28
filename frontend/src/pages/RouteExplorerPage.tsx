@@ -157,7 +157,7 @@ export function RouteExplorerPage() {
   };
 
   return (
-    <div className="page-stack">
+    <div className="page-stack route-explorer-page">
       <header className="visual-page-hero routes">
         <div>
           <p className="eyebrow">{t('routes.eyebrow')}</p>

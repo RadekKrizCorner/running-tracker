@@ -38,7 +38,7 @@ export function EventsPage() {
   const [wizardOpen, setWizardOpen] = useState(false);
 
   return (
-    <div className="page-stack">
+    <div className="page-stack events-page">
       <header className="visual-page-hero race">
         <div>
           <p className="eyebrow">{t('events.eyebrow')}</p>

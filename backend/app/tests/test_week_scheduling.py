@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
+from io import BytesIO
 from uuid import uuid4
+from zipfile import ZipFile
 
 from app.tests.conftest import setup_and_login
 
@@ -237,8 +240,87 @@ def test_week_schedule_creates_manual_training_plan(client) -> None:
     assert calendar.json()["plan"]["title"] == "Base week before 10K"
 
 
+def test_week_save_preserves_cancelled_workout_detail_and_export(client) -> None:
+    """Verify replacing a week retains cancelled records for detail and export."""
+    setup_and_login(client)
+    created = client.post(
+        "/api/v1/planned-workouts",
+        json={
+            "scheduled_date": "2026-05-13",
+            "title": "Cancelled audit session",
+            "workout_type": "tempo",
+            "target_distance_m": 8000,
+            "status": "planned",
+        },
+    )
+    assert created.status_code == 200
+    workout_id = created.json()["id"]
+    cancelled = client.patch(f"/api/v1/planned-workouts/{workout_id}", json={"status": "cancelled"})
+    assert cancelled.status_code == 200
+
+    saved = client.post(
+        "/api/v1/calendar/week",
+        json={
+            "week_start_date": "2026-05-11",
+            "plan_title": "Replacement week",
+            "workouts": [
+                {
+                    "scheduled_date": "2026-05-14",
+                    "title": "Active easy",
+                    "workout_type": "easy",
+                    "target_distance_m": 6000,
+                }
+            ],
+        },
+    )
+
+    assert saved.status_code == 200
+    detail = client.get(f"/api/v1/planned-workouts/{workout_id}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "cancelled"
+    exported = client.get("/api/v1/export/data")
+    assert exported.status_code == 200
+    with ZipFile(BytesIO(exported.content)) as archive:
+        exported_workouts = json.loads(archive.read("planned_workouts.json"))
+    assert workout_id in {workout["id"] for workout in exported_workouts}
+
+
+def test_plan_collection_excludes_cancelled_workouts(client) -> None:
+    """Verify plan collection stays active while individual cancelled detail remains."""
+    setup_and_login(client)
+    saved = client.post(
+        "/api/v1/calendar/week",
+        json={
+            "week_start_date": "2026-05-11",
+            "plan_title": "Active collection",
+            "workouts": [
+                {"scheduled_date": "2026-05-12", "title": "Active easy", "workout_type": "easy"},
+                {"scheduled_date": "2026-05-14", "title": "Cancel me", "workout_type": "tempo"},
+            ],
+        },
+    )
+    assert saved.status_code == 200
+    plan_id = saved.json()["plan"]["id"]
+    cancelled_workout = next(
+        workout for workout in saved.json()["planned_workouts"] if workout["title"] == "Cancel me"
+    )
+    cancelled = client.patch(
+        f"/api/v1/planned-workouts/{cancelled_workout['id']}",
+        json={"status": "cancelled"},
+    )
+    assert cancelled.status_code == 200
+
+    plan = client.get(f"/api/v1/plans/{plan_id}")
+
+    assert plan.status_code == 200
+    assert [workout["title"] for workout in plan.json()["workouts"]] == ["Active easy"]
+    detail = client.get(f"/api/v1/planned-workouts/{cancelled_workout['id']}")
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "cancelled"
+
+
 def test_week_copy_endpoint_copies_source_week_to_target_week(client) -> None:
-    """Verify owner can copy one manual week into another week."""
+    """Verify week copy carries active sessions but not cancelled workouts."""
     setup_and_login(client)
     source = client.post(
         "/api/v1/calendar/week",
@@ -268,6 +350,23 @@ def test_week_copy_endpoint_copies_source_week_to_target_week(client) -> None:
         },
     )
     assert source.status_code == 200
+    source_workouts = source.json()["planned_workouts"]
+    source_tempo = next(workout for workout in source_workouts if workout["title"] == "Source tempo")
+    cancelled = client.patch(
+        f"/api/v1/planned-workouts/{source_tempo['id']}",
+        json={"status": "cancelled"},
+    )
+    assert cancelled.status_code == 200
+    target_cancelled = client.post(
+        "/api/v1/planned-workouts",
+        json={
+            "scheduled_date": "2026-05-14",
+            "title": "Cancelled target audit session",
+            "workout_type": "tempo",
+            "status": "cancelled",
+        },
+    )
+    assert target_cancelled.status_code == 200
 
     copied = client.post(
         "/api/v1/calendar/week/copy",
@@ -282,9 +381,11 @@ def test_week_copy_endpoint_copies_source_week_to_target_week(client) -> None:
     workouts = copied.json()["planned_workouts"]
     assert [(workout["scheduled_date"], workout["title"]) for workout in workouts] == [
         ("2026-05-12", "Source easy"),
-        ("2026-05-15", "Source tempo"),
     ]
     assert copied.json()["plan"]["title"] == "Copied week"
+    retained_target = client.get(f"/api/v1/planned-workouts/{target_cancelled.json()['id']}")
+    assert retained_target.status_code == 200
+    assert retained_target.json()["status"] == "cancelled"
 
 
 def test_workout_pool_items_can_be_scheduled_and_removed(client) -> None:

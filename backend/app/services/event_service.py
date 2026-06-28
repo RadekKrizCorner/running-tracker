@@ -208,6 +208,7 @@ def _planned_workouts_between(session: Session, user_id: UUID, start: date, end:
                 PlannedWorkout.user_id == user_id,
                 PlannedWorkout.scheduled_date >= start,
                 PlannedWorkout.scheduled_date <= end,
+                PlannedWorkout.status != "cancelled",
             )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
         )

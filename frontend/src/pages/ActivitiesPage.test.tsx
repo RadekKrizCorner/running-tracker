@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { addDaysToIso, toIsoDate } from '../lib/date';
@@ -18,7 +19,7 @@ describe('ActivitiesPage', () => {
 
     renderActivitiesPage();
 
-    expect(await screen.findByText(/Hill run/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Hill run/i)).length).toBeGreaterThan(0);
     expect(screen.getByText('123 m')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /Sort by Distance/i }));
@@ -28,13 +29,42 @@ describe('ActivitiesPage', () => {
     });
   });
 
+  test('provides mobile sorting controls for field and direction', async () => {
+    const fetchMock = stubActivitiesFetch([activityResponse({ name: 'Mobile sort run' })]);
+    const user = userEvent.setup();
+
+    renderActivitiesPage();
+
+    await screen.findAllByText(/Mobile sort run/i);
+    await user.selectOptions(screen.getByRole('combobox', { name: /Sort activities by/i }), 'distance');
+    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('sort=-distance'));
+
+    await user.click(screen.getByRole('button', { name: /Sort direction: descending/i }));
+    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('sort=distance'));
+  });
+
+  test('renders an integration-sourced mobile list without manual activity actions', async () => {
+    stubActivitiesFetch([activityResponse({ name: 'Morning run', provider: 'strava' })]);
+
+    renderActivitiesPage();
+
+    await screen.findAllByText('Morning run');
+    const mobileList = screen.getByTestId('activity-mobile-list');
+    expect(mobileList).toHaveTextContent('Morning run');
+    expect(mobileList).toHaveTextContent('5.00 km');
+    expect(mobileList).toHaveTextContent('30m');
+    expect(mobileList).toHaveTextContent(/Synced from Strava/i);
+    expect(screen.queryByRole('button', { name: /start|log|add activity/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /start|log|add activity/i })).not.toBeInTheDocument();
+  });
+
   test('requests name searches from the activities API', async () => {
     const fetchMock = stubActivitiesFetch([activityResponse({ name: 'Morning hills' })]);
     const user = userEvent.setup();
 
     renderActivitiesPage();
 
-    expect(await screen.findByText(/Morning hills/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Morning hills/i)).length).toBeGreaterThan(0);
     await user.type(screen.getByLabelText(/Search by name/i), 'hills');
 
     await waitFor(() => {
@@ -49,7 +79,7 @@ describe('ActivitiesPage', () => {
 
     renderActivitiesPage();
 
-    expect(await screen.findByText(/Range run/i)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Range run/i)).length).toBeGreaterThan(0);
     await user.click(screen.getByRole('button', { name: /Last 90 days/i }));
 
     await waitFor(() => {
@@ -64,6 +94,17 @@ describe('ActivitiesPage', () => {
       expect(lastFetchUrl(fetchMock)).toContain('start_date=2026-01-01');
       expect(lastFetchUrl(fetchMock)).toContain('end_date=2026-01-31');
     });
+  });
+
+  test('keeps custom date controls available in the mobile layout', () => {
+    const styles = readFileSync('src/styles/layout.css', 'utf8');
+
+    expect(styles).toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.activity-custom-range\s*\{[\s\S]*?display:\s*grid;/,
+    );
+    expect(styles).not.toMatch(
+      /@media \(max-width: 760px\)[\s\S]*?\.activity-custom-range\s*\{\s*display:\s*none;/,
+    );
   });
 });
 

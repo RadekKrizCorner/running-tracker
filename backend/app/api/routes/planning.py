@@ -203,6 +203,7 @@ def _calendar_response(session: DbSession, user: CurrentUser, start_date: date, 
                 PlannedWorkout.user_id == user.id,
                 PlannedWorkout.scheduled_date >= start_date,
                 PlannedWorkout.scheduled_date <= end_date,
+                PlannedWorkout.status != "cancelled",
             )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
         )
@@ -381,7 +382,7 @@ def get_plan(plan_id: UUID, session: DbSession, user: CurrentUser) -> PlanPrevie
         raise AppException(404, "PLAN_NOT_FOUND", "Plan was not found")
     workouts = session.scalars(
         select(PlannedWorkout)
-        .where(PlannedWorkout.plan_id == plan.id)
+        .where(PlannedWorkout.plan_id == plan.id, PlannedWorkout.status != "cancelled")
         .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
     ).all()
     return PlanPreview(plan=TrainingPlanRead.model_validate(plan), workouts=[PlannedWorkoutRead.model_validate(workout) for workout in workouts])

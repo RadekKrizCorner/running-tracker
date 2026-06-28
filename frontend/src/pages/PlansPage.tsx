@@ -1,7 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Copy, Plus, Star, Trash2, X } from 'lucide-react';
-import { Bar, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { useRecentWeeklyAnalytics } from '../features/analytics/api';
+import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { Archive, ArrowLeft, ArrowRight, ChevronLeft, ChevronRight, Copy, Lock, Plus, RotateCcw, Star, Trash2, X } from 'lucide-react';
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  usePlotArea,
+  useXAxisScale,
+  useYAxisScale,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { useWeeklyAnalyticsRange } from '../features/analytics/api';
 import {
   useCalendar,
   useCreateWorkoutPoolItem,
@@ -13,10 +25,10 @@ import {
 } from '../features/plans/api';
 import { useMe } from '../features/auth/api';
 import { useUpdateUserPreferences, useUserPreferences } from '../features/profile/api';
-import { addDaysToIso, weekdayLabel, weekStartIso } from '../lib/date';
+import { addDaysToIso, todayIso, weekdayLabel, weekStartIso } from '../lib/date';
 import { formatDate, formatDistance, formatDuration, formatShortDate, getFormatLocale } from '../lib/format';
 import { enumLabel, useTranslation } from '../lib/i18n';
-import type { CalendarEvent, PlannedWorkout, WeeklyMetric, WorkoutPoolItem, WorkoutTemplate } from '../lib/api/types';
+import type { CalendarActivity, CalendarEvent, PlannedWorkout, WeeklyMetric, WorkoutPoolItem, WorkoutTemplate } from '../lib/api/types';
 
 type WeekRow = {
   local_id: string;
@@ -66,8 +78,36 @@ type PlanningVolumeOutlookDatum = {
   planned_time_h: number | null;
 };
 
+type PlanningGapPoint = {
+  x: number;
+  actualY: number;
+  plannedY: number;
+  actualValue: number;
+  plannedValue: number;
+};
+
+type PlanningGapSegment = {
+  tone: 'above' | 'below';
+  points: Array<{ x: number; y: number }>;
+};
+
+type PlanningGapValueKey = 'actual_distance_km' | 'planned_distance_km' | 'actual_time_h' | 'planned_time_h';
+
 const LONG_TERM_WEEK_COUNT = 12;
+const PLANNING_OUTLOOK_PAST_WEEK_COUNT = 4;
+const MAX_PLANNING_HISTORY_WEEKS = 104;
+const MAX_PLANNING_OUTLOOK_WEEK_COUNT = MAX_PLANNING_HISTORY_WEEKS + LONG_TERM_WEEK_COUNT;
 const DAYS_PER_WEEK = 7;
+const PLANNING_DISTANCE_GAP_IDS = {
+  clip: 'planning-distance-gap-clip',
+  abovePattern: 'planning-distance-gap-above-pattern',
+  belowPattern: 'planning-distance-gap-below-pattern',
+};
+const PLANNING_TIME_GAP_IDS = {
+  clip: 'planning-time-gap-clip',
+  abovePattern: 'planning-time-gap-above-pattern',
+  belowPattern: 'planning-time-gap-below-pattern',
+};
 
 const emptyTemplateForm = {
   name: '',
@@ -183,6 +223,20 @@ function defaultPlanTitle(weekStart: string, t: TranslateFn) {
   return t('plans.defaultPlanTitle', { date: formatDate(weekStart) });
 }
 
+function normalizePlanningRangeStart(value: string, fallback: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? weekStartIso(value) : weekStartIso(fallback);
+}
+
+function weekCountInclusive(startDate: string, endDate: string) {
+  const diffDays = Math.floor((isoDateMs(endDate) - isoDateMs(startDate)) / 86400000);
+  return diffDays < 0 ? 0 : Math.floor(diffDays / DAYS_PER_WEEK) + 1;
+}
+
+function isoDateMs(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
 function defaultEasyRun(date: string, t: TranslateFn): WeekRow {
   return {
     local_id: makeLocalId(date, 0),
@@ -281,10 +335,22 @@ function rowFromRaceEvent(date: string, event: CalendarEvent | null, index: numb
 export function PlansPage() {
   const { t } = useTranslation();
   const me = useMe();
-  const [weekStart, setWeekStart] = useState(weekStartIso());
-  const [horizonStart, setHorizonStart] = useState(weekStartIso());
+  const currentWeekStart = weekStartIso(todayIso(me.data?.timezone));
+  const [planView, setPlanView] = useState<'week' | 'outlook'>('week');
+  const [weekStartOverride, setWeekStart] = useState<string | null>(null);
+  const [horizonStartOverride, setHorizonStart] = useState<string | null>(null);
+  const [planRangeStartInputOverride, setPlanRangeStartInput] = useState<string | null>(null);
+  const weekStart = weekStartOverride ?? currentWeekStart;
+  const horizonStart = horizonStartOverride ?? currentWeekStart;
+  const planRangeStartInput = planRangeStartInputOverride ?? currentWeekStart;
   const weekDates = useMemo(() => Array.from({ length: 7 }, (_, index) => addDaysToIso(weekStart, index)), [weekStart]);
   const weekEnd = weekDates[6];
+  const planningRangeMin = addDaysToIso(currentWeekStart, -MAX_PLANNING_HISTORY_WEEKS * DAYS_PER_WEEK);
+  const planningRangeMax = currentWeekStart;
+  const normalizedPlanRangeInput = normalizePlanningRangeStart(planRangeStartInput, horizonStart);
+  const planRangeInputValid = /^\d{4}-\d{2}-\d{2}$/.test(planRangeStartInput)
+    && normalizedPlanRangeInput >= planningRangeMin
+    && normalizedPlanRangeInput <= planningRangeMax;
   const planTitle = useMemo(() => defaultPlanTitle(weekStart, t), [t, weekStart]);
   const templates = useWorkoutTemplates();
   const preferences = useUserPreferences();
@@ -292,9 +358,40 @@ export function PlansPage() {
   const workoutPool = useWorkoutPool();
   const calendar = useCalendar(weekStart, weekEnd);
   const calendarEvents = calendar.data?.events ?? [];
+  const plannedOutlookStart = addDaysToIso(horizonStart, -PLANNING_OUTLOOK_PAST_WEEK_COUNT * DAYS_PER_WEEK);
   const longTermEnd = addDaysToIso(horizonStart, LONG_TERM_WEEK_COUNT * DAYS_PER_WEEK - 1);
-  const longTermCalendar = useCalendar(horizonStart, longTermEnd);
-  const recentLoadWeeks = useRecentWeeklyAnalytics(6);
+  const lockedPlanStart = preferences.data?.planning_week_start_date
+    ? weekStartIso(preferences.data.planning_week_start_date)
+    : null;
+  const planningPreferencesResolved = preferences.isSuccess || preferences.isError;
+  const requestedPlanningOutlookRangeStart = lockedPlanStart ?? plannedOutlookStart;
+  const planningOutlookIntersectsHorizon = requestedPlanningOutlookRangeStart <= longTermEnd;
+  const longTermLastWeekStart = weekStartIso(longTermEnd);
+  const earliestBoundedOutlookStart = addDaysToIso(
+    longTermLastWeekStart,
+    -(MAX_PLANNING_OUTLOOK_WEEK_COUNT - 1) * DAYS_PER_WEEK,
+  );
+  const boundedPlanningOutlookRangeStart = requestedPlanningOutlookRangeStart < earliestBoundedOutlookStart
+    ? earliestBoundedOutlookStart
+    : requestedPlanningOutlookRangeStart;
+  const planningOutlookRangeStart = planningOutlookIntersectsHorizon
+    ? boundedPlanningOutlookRangeStart
+    : weekStartIso(longTermEnd);
+  const planningOutlookWeekCount = planningOutlookIntersectsHorizon
+    ? weekCountInclusive(planningOutlookRangeStart, longTermEnd)
+    : 0;
+  const outlookActive = planView === 'outlook';
+  const longTermCalendar = useCalendar(horizonStart, longTermEnd, outlookActive);
+  const planningOutlookCalendar = useCalendar(
+    planningOutlookRangeStart,
+    longTermEnd,
+    outlookActive && planningPreferencesResolved && planningOutlookIntersectsHorizon,
+  );
+  const outlookLoadWeeks = useWeeklyAnalyticsRange(
+    planningOutlookIntersectsHorizon ? planningOutlookRangeStart : null,
+    longTermEnd,
+    outlookActive && planningPreferencesResolved && planningOutlookIntersectsHorizon,
+  );
   const saveWeek = useSaveWeekSchedule();
   const createTemplate = useCreateWorkoutTemplate();
   const createPoolItem = useCreateWorkoutPoolItem();
@@ -315,6 +412,8 @@ export function PlansPage() {
   const [savedPlanFingerprint, setSavedPlanFingerprint] = useState(() => weekPlanFingerprint(planTitle, days));
   const [draftWeeks, setDraftWeeks] = useState<Record<string, WeekDraft>>({});
   const draftWeeksRef = useRef<Record<string, WeekDraft>>({});
+  const [draggedPlanDate, setDraggedPlanDate] = useState<string | null>(null);
+  const [dragOverPlanDate, setDragOverPlanDate] = useState<string | null>(null);
   const selectedDay = days.find((day) => day.scheduled_date === selectedDate) ?? days[0] ?? emptyDay(selectedDate);
   const selectedSession =
     selectedDay.sessions.find((session) => session.local_id === selectedSessionLocalId) ??
@@ -382,10 +481,29 @@ export function PlansPage() {
       ? t('plans.saveWeeks', { count: dirtyWeekDrafts.length })
       : t('plans.saveWeek');
   const longTermWeeks = useMemo(
-    () => buildLongTermWeeks(horizonStart, longTermCalendar.data?.planned_workouts ?? [], dirtyWeekDrafts),
-    [dirtyWeekDrafts, horizonStart, longTermCalendar.data?.planned_workouts],
+    () => buildLongTermWeeks(
+      horizonStart,
+      (outlookActive ? longTermCalendar.data : calendar.data)?.planned_workouts ?? [],
+      dirtyWeekDrafts,
+    ),
+    [calendar.data, dirtyWeekDrafts, horizonStart, longTermCalendar.data, outlookActive],
   );
-  const historicalLoadWeeks = Array.isArray(recentLoadWeeks.data) ? recentLoadWeeks.data : [];
+  const plannedOutlookWeeks = useMemo(
+    () => {
+      if (!outlookActive) {
+        return [];
+      }
+      return buildLongTermWeeks(
+        planningOutlookRangeStart,
+        planningOutlookCalendar.data?.planned_workouts ?? [],
+        dirtyWeekDrafts,
+        planningOutlookWeekCount,
+      );
+    },
+    [dirtyWeekDrafts, outlookActive, planningOutlookCalendar.data?.planned_workouts, planningOutlookRangeStart, planningOutlookWeekCount],
+  );
+  const activeLoadWeeks = outlookActive ? outlookLoadWeeks.data : [];
+  const historicalLoadWeeks = Array.isArray(activeLoadWeeks) ? activeLoadWeeks : [];
 
   useEffect(() => {
     selectedDateRef.current = selectedDate;
@@ -394,6 +512,10 @@ export function PlansPage() {
   useEffect(() => {
     draftWeeksRef.current = draftWeeks;
   }, [draftWeeks]);
+
+  useEffect(() => {
+    setPlanRangeStartInput(lockedPlanStart ?? horizonStart);
+  }, [horizonStart, lockedPlanStart]);
 
   useEffect(() => {
     if (!currentDraftWeek) {
@@ -541,6 +663,87 @@ export function PlansPage() {
     const nextWeekStart = weekStartIso(date);
     setHorizonStart(nextWeekStart);
     setWeekStart(nextWeekStart);
+  }
+
+  function lockPlanningRange() {
+    if (isReadOnlyDemo || !planRangeInputValid) {
+      return;
+    }
+    setPlanRangeStartInput(normalizedPlanRangeInput);
+    updatePreferences.mutate({ planning_week_start_date: normalizedPlanRangeInput });
+  }
+
+  function resetPlanningRange() {
+    if (isReadOnlyDemo) {
+      return;
+    }
+    setPlanRangeStartInput(horizonStart);
+    updatePreferences.mutate({ planning_week_start_date: null });
+  }
+
+  function moveLongTermDay(sourceDate: string, targetDate: string) {
+    if (isReadOnlyDemo || sourceDate === targetDate) {
+      setDraggedPlanDate(null);
+      setDragOverPlanDate(null);
+      return;
+    }
+    const sourceWeekStart = weekStartIso(sourceDate);
+    const targetWeekStart = weekStartIso(targetDate);
+    const sourceWeek = longTermWeeks.find((week) => week.weekStart === sourceWeekStart);
+    const targetWeek = longTermWeeks.find((week) => week.weekStart === targetWeekStart);
+    const baseDrafts = draftWeeksWithCurrent;
+    const sourceDraft = draftForPlanningMove(sourceWeekStart, baseDrafts, sourceWeek, t);
+    const targetDraft = sourceWeekStart === targetWeekStart
+      ? sourceDraft
+      : draftForPlanningMove(targetWeekStart, baseDrafts, targetWeek, t);
+    const sourceDay = sourceDraft.days.find((day) => day.scheduled_date === sourceDate);
+    const targetDay = targetDraft.days.find((day) => day.scheduled_date === targetDate);
+
+    if (!sourceDay || !targetDay || !sourceDay.sessions.some(rowHasWorkout)) {
+      setDraggedPlanDate(null);
+      setDragOverPlanDate(null);
+      return;
+    }
+
+    const movedSourceSessions = redateSessions(sourceDay.sessions, targetDate);
+    const movedTargetSessions = redateSessions(targetDay.sessions, sourceDate);
+    const nextDrafts = { ...baseDrafts };
+
+    if (sourceWeekStart === targetWeekStart) {
+      const movedDays = sourceDraft.days.map((day) => {
+        if (day.scheduled_date === sourceDate) {
+          return { ...day, sessions: movedTargetSessions };
+        }
+        if (day.scheduled_date === targetDate) {
+          return { ...day, sessions: movedSourceSessions };
+        }
+        return day;
+      });
+      nextDrafts[sourceWeekStart] = { ...sourceDraft, days: movedDays };
+    } else {
+      nextDrafts[sourceWeekStart] = {
+        ...sourceDraft,
+        days: sourceDraft.days.map((day) => (day.scheduled_date === sourceDate ? { ...day, sessions: movedTargetSessions } : day)),
+      };
+      nextDrafts[targetWeekStart] = {
+        ...targetDraft,
+        days: targetDraft.days.map((day) => (day.scheduled_date === targetDate ? { ...day, sessions: movedSourceSessions } : day)),
+      };
+    }
+
+    draftWeeksRef.current = nextDrafts;
+    setDraftWeeks(nextDrafts);
+    const activeDraft = nextDrafts[weekStart];
+    if (activeDraft) {
+      setDays(activeDraft.days);
+      setSavedPlanFingerprint(activeDraft.savedFingerprint);
+      const activeSelectedDate = selectedDateRef.current === sourceDate ? targetDate : selectedDateRef.current;
+      const nextSelectedDay = activeDraft.days.find((day) => day.scheduled_date === activeSelectedDate);
+      setSelectedDate(nextSelectedDay?.scheduled_date ?? activeDraft.days[0]?.scheduled_date ?? weekStart);
+      setSelectedSessionLocalId(firstSelectableSessionId(nextSelectedDay));
+    }
+    setDraggedPlanDate(null);
+    setDragOverPlanDate(null);
   }
 
   function applyTemplate(date: string, templateId: string) {
@@ -823,7 +1026,7 @@ export function PlansPage() {
   }
 
   return (
-    <div className="page-stack">
+    <div className="page-stack plans-page" data-plan-view={planView}>
       <header className="page-header">
         <div>
           <p className="eyebrow">{t('plans.eyebrow')}</p>
@@ -845,6 +1048,53 @@ export function PlansPage() {
             {t('common.next')}
             <ChevronRight size={16} />
           </button>
+          <div className="plan-range-lock" aria-label={t('plans.planRangeLock')}>
+            <label>
+              <span>{t('plans.planRangeStart')}</span>
+              <input
+                aria-label={t('plans.planRangeStart')}
+                aria-invalid={!planRangeInputValid}
+                disabled={isReadOnlyDemo}
+                min={planningRangeMin}
+                max={planningRangeMax}
+                type="date"
+                value={planRangeStartInput}
+                onChange={(event) => setPlanRangeStartInput(event.target.value)}
+              />
+            </label>
+            <button
+              className="secondary-button compact"
+              type="button"
+              onClick={lockPlanningRange}
+              disabled={isReadOnlyDemo || updatePreferences.isPending || !planRangeInputValid}
+              title={mutationDisabledReason}
+            >
+              <Lock size={14} />
+              {t('plans.lockPlanRange')}
+            </button>
+            {lockedPlanStart ? (
+              <button
+                className="secondary-button compact"
+                type="button"
+                onClick={resetPlanningRange}
+                disabled={isReadOnlyDemo || updatePreferences.isPending}
+                title={mutationDisabledReason}
+              >
+                <RotateCcw size={14} />
+                {t('plans.resetPlanRange')}
+              </button>
+            ) : null}
+            <small>
+              {lockedPlanStart
+                ? t('plans.planRangeLocked', { date: formatShortDate(lockedPlanStart) })
+                : t('plans.planRangeUnlocked')}
+            </small>
+            {!planRangeInputValid ? (
+              <small className="form-error" role="alert">
+                {t('plans.planRangeInvalid', { min: formatShortDate(planningRangeMin), max: formatShortDate(planningRangeMax) })}
+              </small>
+            ) : null}
+          </div>
           <button className="secondary-button" type="button" onClick={() => setTemplateLibraryOpen(true)}>
             <Archive size={16} />
             {t('plans.templateLibrary')}
@@ -862,6 +1112,31 @@ export function PlansPage() {
         </div>
       </header>
 
+      <div className="plan-view-tabs" role="group" aria-label={t('plans.planView')}>
+        <button
+          className={planView === 'week' ? 'active' : ''}
+          type="button"
+          aria-pressed={planView === 'week'}
+          onClick={() => setPlanView('week')}
+        >
+          {t('plans.weekView')}
+        </button>
+        <button
+          className={planView === 'outlook' ? 'active' : ''}
+          type="button"
+          aria-pressed={planView === 'outlook'}
+          onClick={() => setPlanView('outlook')}
+        >
+          {t('plans.outlookView')}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTemplateLibraryOpen(true)}
+        >
+          {t('plans.libraryView')}
+        </button>
+      </div>
+
       {isReadOnlyDemo ? (
         <section className="read-only-demo-banner" role="status">
           <strong>{t('plans.demoReadOnlyTitle')}</strong>
@@ -869,8 +1144,14 @@ export function PlansPage() {
         </section>
       ) : null}
 
+      <PlanWeekSchedule
+        days={days}
+        activities={calendar.data?.activities ?? []}
+        onOpenDay={openLongTermDay}
+      />
+
       <section className="planning-long-term-layout">
-        <PlanningVolumeOutlookChart historicalWeeks={historicalLoadWeeks} plannedWeeks={longTermWeeks} />
+        <PlanningVolumeOutlookChart historicalWeeks={historicalLoadWeeks} plannedWeeks={plannedOutlookWeeks} />
         <section className="panel long-term-plan-panel" aria-label={t('plans.longTermPlan')}>
           <div className="panel-heading compact">
             <div>
@@ -881,7 +1162,24 @@ export function PlansPage() {
           </div>
           <div className="long-term-week-list">
             {longTermWeeks.map((week) => (
-              <LongTermWeekRow key={week.weekStart} week={week} onSelectDay={openLongTermDay} />
+              <LongTermWeekRow
+                key={week.weekStart}
+                week={week}
+                horizonStart={horizonStart}
+                horizonEnd={longTermEnd}
+                draggedDate={draggedPlanDate}
+                dragOverDate={dragOverPlanDate}
+                onDragEnd={() => {
+                  setDraggedPlanDate(null);
+                  setDragOverPlanDate(null);
+                }}
+                onDragOver={setDragOverPlanDate}
+                onDragStart={setDraggedPlanDate}
+                onDropDay={moveLongTermDay}
+                onMoveDay={moveLongTermDay}
+                onSelectDay={openLongTermDay}
+                readOnly={isReadOnlyDemo}
+              />
             ))}
           </div>
         </section>
@@ -949,6 +1247,63 @@ export function PlansPage() {
   );
 }
 
+function PlanWeekSchedule({
+  days,
+  activities,
+  onOpenDay,
+}: {
+  days: WeekDayPlan[];
+  activities: CalendarActivity[];
+  onOpenDay: (date: string) => void;
+}) {
+  const { t } = useTranslation();
+  const plannedDistanceM = days.reduce(
+    (total, day) => total + day.sessions.reduce((dayTotal, session) => dayTotal + Number(session.target_distance_km || 0) * 1000, 0),
+    0,
+  );
+  const actualDistanceM = activities.reduce((total, activity) => total + activity.distance_m, 0);
+  const plannedSessions = days.reduce((total, day) => total + day.sessions.filter((session) => session.workout_type !== 'rest').length, 0);
+
+  return (
+    <section className="plan-week-schedule" data-testid="plan-week-schedule" aria-label={t('plans.weekView')}>
+      <dl className="plan-week-summary">
+        <div><dt>{t('plans.actual')}</dt><dd>{formatDistance(actualDistanceM)}</dd></div>
+        <div><dt>{t('plans.planned')}</dt><dd>{formatDistance(plannedDistanceM)}</dd></div>
+        <div><dt>{t('plans.delta')}</dt><dd>{formatDistance(actualDistanceM - plannedDistanceM)}</dd></div>
+        <div><dt>{t('dashboard.sessions')}</dt><dd>{activities.length} {t('plans.ofPlannedSessions', { value: plannedSessions })}</dd></div>
+      </dl>
+      <p className="plan-sync-note">{t('plans.completionMatchedAfterSync')}</p>
+      <div className="plan-week-list">
+        {days.map((day) => {
+          const session = day.sessions.find((item) => item.workout_type !== 'rest') ?? day.sessions[0] ?? null;
+          const activity = activities.find((item) => item.date === day.scheduled_date) ?? null;
+          const title = session?.title || (session?.workout_type === 'rest' ? t('sidebar.restToday') : t('plans.unscheduled'));
+          const plannedDetail = session
+            ? [session.target_distance_km ? `${session.target_distance_km} km` : null, session.target_duration_min ? `${session.target_duration_min} min` : null, enumLabel(t, 'intensity', session.target_intensity)]
+                .filter(Boolean)
+                .join(' · ')
+            : '—';
+          return (
+            <button className={session ? 'plan-week-row planned' : 'plan-week-row'} type="button" key={day.scheduled_date} onClick={() => onOpenDay(day.scheduled_date)}>
+              <span className="plan-week-date">
+                <strong>{weekdayLabel(day.scheduled_date)}</strong>
+                <time dateTime={day.scheduled_date}>{formatShortDate(day.scheduled_date)}</time>
+              </span>
+              <span className="plan-week-session">
+                <strong>{title}</strong>
+                <small>{plannedDetail}</small>
+                {activity ? <small className="activity-provider">{t('activities.syncedFromStrava')} · {activity.name ?? t('activity.run')}</small> : null}
+              </span>
+              <span>{session ? enumLabel(t, 'intensity', session.target_intensity) : '—'}</span>
+              <ChevronRight size={18} aria-hidden="true" />
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 function PlanningVolumeOutlookChart({
   historicalWeeks,
   plannedWeeks,
@@ -988,6 +1343,14 @@ function PlanningVolumeOutlookChart({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="week_start_date" tickFormatter={(value) => formatShortDate(String(value))} />
               <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)} km`} />
+              <PlanningGapOverlay
+                abovePatternId={PLANNING_DISTANCE_GAP_IDS.abovePattern}
+                actualValueKey="actual_distance_km"
+                belowPatternId={PLANNING_DISTANCE_GAP_IDS.belowPattern}
+                clipId={PLANNING_DISTANCE_GAP_IDS.clip}
+                data={data}
+                plannedValueKey="planned_distance_km"
+              />
               <Tooltip
                 formatter={(value, name) => [
                   value === null ? t('common.notAvailable') : formatDistance(Number(value) * 1000),
@@ -1004,6 +1367,7 @@ function PlanningVolumeOutlookChart({
                 stroke="#2f66d0"
                 strokeWidth={2}
                 dot={false}
+                tooltipType="none"
               />
               <Line
                 type="monotone"
@@ -1012,6 +1376,7 @@ function PlanningVolumeOutlookChart({
                 stroke="#d17b0f"
                 strokeWidth={2}
                 dot={false}
+                tooltipType="none"
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -1023,6 +1388,14 @@ function PlanningVolumeOutlookChart({
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="week_start_date" tickFormatter={(value) => formatShortDate(String(value))} />
               <YAxis tickFormatter={(value) => `${Number(value).toFixed(0)}h`} />
+              <PlanningGapOverlay
+                abovePatternId={PLANNING_TIME_GAP_IDS.abovePattern}
+                actualValueKey="actual_time_h"
+                belowPatternId={PLANNING_TIME_GAP_IDS.belowPattern}
+                clipId={PLANNING_TIME_GAP_IDS.clip}
+                data={data}
+                plannedValueKey="planned_time_h"
+              />
               <Tooltip
                 formatter={(value, name) => [
                   value === null ? t('common.notAvailable') : formatDuration(Number(value) * 3600),
@@ -1039,6 +1412,7 @@ function PlanningVolumeOutlookChart({
                 stroke="#4f8f5f"
                 strokeWidth={2}
                 dot={false}
+                tooltipType="none"
               />
               <Line
                 type="monotone"
@@ -1047,6 +1421,7 @@ function PlanningVolumeOutlookChart({
                 stroke="#9c6ade"
                 strokeWidth={2}
                 dot={false}
+                tooltipType="none"
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -1054,6 +1429,86 @@ function PlanningVolumeOutlookChart({
       </div>
       <small>{t('plans.actualPlannedVolume')}</small>
     </div>
+  );
+}
+
+function PlanningGapOverlay({
+  abovePatternId,
+  actualValueKey,
+  belowPatternId,
+  clipId,
+  data,
+  plannedValueKey,
+}: {
+  abovePatternId: string;
+  actualValueKey: PlanningGapValueKey;
+  belowPatternId: string;
+  clipId: string;
+  data: PlanningVolumeOutlookDatum[];
+  plannedValueKey: PlanningGapValueKey;
+}) {
+  const plotArea = usePlotArea();
+  const xScale = useXAxisScale();
+  const yScale = useYAxisScale();
+
+  if (!plotArea || !xScale || !yScale) {
+    return null;
+  }
+
+  const points = data.map((datum): PlanningGapPoint | null => {
+    const actualValue = datum[actualValueKey];
+    const plannedValue = datum[plannedValueKey];
+    if (actualValue === null || plannedValue === null) {
+      return null;
+    }
+
+    const x = xScale(datum.week_start_date, { position: 'middle' });
+    const actualY = yScale(actualValue);
+    const plannedY = yScale(plannedValue);
+
+    if (!isFiniteNumber(x) || !isFiniteNumber(actualY) || !isFiniteNumber(plannedY)) {
+      return null;
+    }
+
+    return {
+      x,
+      actualY,
+      plannedY,
+      actualValue,
+      plannedValue,
+    };
+  });
+  const segments = buildPlanningGapSegments(points);
+
+  if (!segments.length) {
+    return null;
+  }
+
+  return (
+    <g className="planning-gap-overlay" pointerEvents="none" aria-hidden="true">
+      <defs>
+        <clipPath id={clipId}>
+          <rect x={plotArea.x} y={plotArea.y} width={plotArea.width} height={plotArea.height} />
+        </clipPath>
+        <pattern id={abovePatternId} width={8} height={8} patternUnits="userSpaceOnUse">
+          <rect width={8} height={8} fill="#2f9e44" opacity={0.08} />
+          <path d="M -2 8 L 8 -2 M 0 10 L 10 0" stroke="#2f9e44" strokeWidth={1.4} opacity={0.55} />
+        </pattern>
+        <pattern id={belowPatternId} width={8} height={8} patternUnits="userSpaceOnUse">
+          <rect width={8} height={8} fill="#d64545" opacity={0.08} />
+          <path d="M -2 0 L 8 10 M 0 -2 L 10 8" stroke="#d64545" strokeWidth={1.4} opacity={0.55} />
+        </pattern>
+      </defs>
+      <g clipPath={`url(#${clipId})`}>
+        {segments.map((segment, index) => (
+          <polygon
+            key={`${segment.tone}-${index}`}
+            points={formatChartPoints(segment.points)}
+            fill={`url(#${segment.tone === 'above' ? abovePatternId : belowPatternId})`}
+          />
+        ))}
+      </g>
+    </g>
   );
 }
 
@@ -1090,6 +1545,76 @@ export function buildPlanningVolumeOutlookData(
   });
 
   return Array.from(dataByWeek.values()).sort((left, right) => left.week_start_date.localeCompare(right.week_start_date));
+}
+
+export function buildPlanningGapSegments(points: Array<PlanningGapPoint | null>): PlanningGapSegment[] {
+  const segments: PlanningGapSegment[] = [];
+
+  points.forEach((point, index) => {
+    const nextPoint = points[index + 1];
+    if (!point || !nextPoint || point.x === nextPoint.x) {
+      return;
+    }
+
+    const startDiff = point.actualValue - point.plannedValue;
+    const endDiff = nextPoint.actualValue - nextPoint.plannedValue;
+    if (startDiff === 0 && endDiff === 0) {
+      return;
+    }
+
+    if (startDiff * endDiff < 0) {
+      const intersectionRatio = Math.abs(startDiff) / (Math.abs(startDiff) + Math.abs(endDiff));
+      const intersectionActualY = interpolate(point.actualY, nextPoint.actualY, intersectionRatio);
+      const intersectionPlannedY = interpolate(point.plannedY, nextPoint.plannedY, intersectionRatio);
+      const intersection = {
+        x: interpolate(point.x, nextPoint.x, intersectionRatio),
+        y: (intersectionActualY + intersectionPlannedY) / 2,
+      };
+
+      segments.push({
+        tone: startDiff > 0 ? 'above' : 'below',
+        points: [
+          { x: point.x, y: point.actualY },
+          intersection,
+          { x: point.x, y: point.plannedY },
+        ],
+      });
+      segments.push({
+        tone: endDiff > 0 ? 'above' : 'below',
+        points: [
+          intersection,
+          { x: nextPoint.x, y: nextPoint.actualY },
+          { x: nextPoint.x, y: nextPoint.plannedY },
+        ],
+      });
+      return;
+    }
+
+    const toneSource = startDiff === 0 ? endDiff : startDiff;
+    segments.push({
+      tone: toneSource > 0 ? 'above' : 'below',
+      points: [
+        { x: point.x, y: point.actualY },
+        { x: nextPoint.x, y: nextPoint.actualY },
+        { x: nextPoint.x, y: nextPoint.plannedY },
+        { x: point.x, y: point.plannedY },
+      ],
+    });
+  });
+
+  return segments;
+}
+
+function formatChartPoints(points: Array<{ x: number; y: number }>) {
+  return points.map((point) => `${point.x},${point.y}`).join(' ');
+}
+
+function interpolate(start: number, end: number, ratio: number) {
+  return start + (end - start) * ratio;
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }
 
 function PlanningToolsModal({
@@ -1239,11 +1764,31 @@ function PlanningToolsModal({
 }
 
 function LongTermWeekRow({
+  draggedDate,
+  dragOverDate,
+  onDragEnd,
+  onDragOver,
+  onDragStart,
+  onDropDay,
+  onMoveDay,
   week,
+  horizonStart,
+  horizonEnd,
   onSelectDay,
+  readOnly,
 }: {
+  draggedDate: string | null;
+  dragOverDate: string | null;
+  onDragEnd: () => void;
+  onDragOver: (date: string) => void;
+  onDragStart: (date: string) => void;
+  onDropDay: (sourceDate: string, targetDate: string) => void;
+  onMoveDay: (sourceDate: string, targetDate: string) => void;
   week: LongTermWeekPlan;
+  horizonStart: string;
+  horizonEnd: string;
   onSelectDay: (date: string) => void;
+  readOnly: boolean;
 }) {
   const { t } = useTranslation();
   const weekRange = compactWeekRange(week.weekStart);
@@ -1255,7 +1800,22 @@ function LongTermWeekRow({
       </div>
       <div className="long-term-day-grid">
         {week.days.map((day) => (
-          <LongTermDayButton key={day.scheduled_date} day={day} onSelect={() => onSelectDay(day.scheduled_date)} />
+          <LongTermDayButton
+            key={day.scheduled_date}
+            day={day}
+            draggedDate={draggedDate}
+            dragOverDate={dragOverDate}
+            onDragEnd={onDragEnd}
+            onDragOver={onDragOver}
+            onDragStart={onDragStart}
+            onDropDay={onDropDay}
+            canMoveEarlier={day.scheduled_date > horizonStart}
+            canMoveLater={day.scheduled_date < horizonEnd}
+            onMoveEarlier={() => onMoveDay(day.scheduled_date, addDaysToIso(day.scheduled_date, -1))}
+            onMoveLater={() => onMoveDay(day.scheduled_date, addDaysToIso(day.scheduled_date, 1))}
+            onSelect={() => onSelectDay(day.scheduled_date)}
+            readOnly={readOnly}
+          />
         ))}
       </div>
       <div className="long-term-week-summary" aria-label={t('plans.weekSummary', { date: formatDate(week.weekStart) })}>
@@ -1275,7 +1835,35 @@ function compactShortDate(value: string) {
   return formatShortDate(value).replace(/\s+/g, '');
 }
 
-function LongTermDayButton({ day, onSelect }: { day: WeekDayPlan; onSelect: () => void }) {
+function LongTermDayButton({
+  day,
+  draggedDate,
+  dragOverDate,
+  onDragEnd,
+  onDragOver,
+  onDragStart,
+  onDropDay,
+  canMoveEarlier,
+  canMoveLater,
+  onMoveEarlier,
+  onMoveLater,
+  onSelect,
+  readOnly,
+}: {
+  day: WeekDayPlan;
+  draggedDate: string | null;
+  dragOverDate: string | null;
+  onDragEnd: () => void;
+  onDragOver: (date: string) => void;
+  onDragStart: (date: string) => void;
+  onDropDay: (sourceDate: string, targetDate: string) => void;
+  canMoveEarlier: boolean;
+  canMoveLater: boolean;
+  onMoveEarlier: () => void;
+  onMoveLater: () => void;
+  onSelect: () => void;
+  readOnly: boolean;
+}) {
   const { t } = useTranslation();
   const state = dayState(day);
   const visibleSessions = day.sessions.filter(rowHasWorkout);
@@ -1291,18 +1879,82 @@ function LongTermDayButton({ day, onSelect }: { day: WeekDayPlan; onSelect: () =
         }`
       : t(state === 'rest' ? 'plans.restDay' : 'plans.noDistance');
   const typeClass = primarySession ? `type-${primarySession.workout_type}` : 'type-empty';
+  const canDrag = !readOnly && visibleSessions.length > 0;
+  const isDragged = draggedDate === day.scheduled_date;
+  const isDropTarget = Boolean(draggedDate && dragOverDate === day.scheduled_date && draggedDate !== day.scheduled_date);
+
+  function handleDragStart(event: DragEvent<HTMLButtonElement>) {
+    if (!canDrag) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', day.scheduled_date);
+    onDragStart(day.scheduled_date);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLButtonElement>) {
+    if (readOnly || !draggedDate || draggedDate === day.scheduled_date) {
+      return;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    onDragOver(day.scheduled_date);
+  }
+
+  function handleDrop(event: DragEvent<HTMLButtonElement>) {
+    if (readOnly) {
+      return;
+    }
+    event.preventDefault();
+    const sourceDate = event.dataTransfer.getData('text/plain') || draggedDate;
+    if (sourceDate) {
+      onDropDay(sourceDate, day.scheduled_date);
+    }
+  }
+
   return (
-    <button
-      className={`long-term-day-button ${state} ${typeClass}`}
-      type="button"
-      aria-label={t('plans.openLongTermDay', { date: shortWeekday(day.scheduled_date), summary })}
-      onClick={onSelect}
-    >
-      <span>{shortWeekday(day.scheduled_date)}</span>
-      <strong>{summary}</strong>
-      {extraSessionCount > 0 ? <em>{t('plans.moreSessions', { count: extraSessionCount })}</em> : null}
-      <small>{detail}</small>
-    </button>
+    <div className="long-term-day-slot">
+      <button
+        className={`long-term-day-button ${state} ${typeClass}${canDrag ? ' draggable' : ''}${isDragged ? ' dragging' : ''}${isDropTarget ? ' drop-target' : ''}`}
+        type="button"
+        draggable={canDrag}
+        aria-grabbed={isDragged || undefined}
+        aria-label={t('plans.openLongTermDay', { date: shortWeekday(day.scheduled_date), summary })}
+        onDragEnd={onDragEnd}
+        onDragOver={handleDragOver}
+        onDragStart={handleDragStart}
+        onDrop={handleDrop}
+        onClick={onSelect}
+      >
+        <span>{shortWeekday(day.scheduled_date)}</span>
+        <strong>{summary}</strong>
+        {extraSessionCount > 0 ? <em>{t('plans.moreSessions', { count: extraSessionCount })}</em> : null}
+        <small>{detail}</small>
+      </button>
+      {canDrag ? (
+        <div className="long-term-day-move-actions" role="group" aria-label={t('plans.moveDayActions', { summary })}>
+          <button
+            className="long-term-day-move-button"
+            type="button"
+            aria-label={t('plans.moveDayEarlier', { summary })}
+            disabled={!canMoveEarlier}
+            onClick={onMoveEarlier}
+          >
+            <ArrowLeft size={14} aria-hidden="true" />
+          </button>
+          <button
+            className="long-term-day-move-button"
+            type="button"
+            aria-label={t('plans.moveDayLater', { summary })}
+            disabled={!canMoveLater}
+            onClick={onMoveLater}
+          >
+            <ArrowRight size={14} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1820,7 +2472,49 @@ function overviewFromDays(days: WeekDayPlan[]): PlanningOverview {
   return overviewFromRows(days.flatMap((day) => day.sessions));
 }
 
-function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[], draftWeeks: WeekDraft[] = []): LongTermWeekPlan[] {
+function draftForPlanningMove(
+  weekStart: string,
+  draftWeeks: Record<string, WeekDraft>,
+  longTermWeek: LongTermWeekPlan | undefined,
+  t: TranslateFn,
+): WeekDraft {
+  const existingDraft = draftWeeks[weekStart];
+  if (existingDraft) {
+    return {
+      ...existingDraft,
+      days: completeWeekDays(weekStart, existingDraft.days),
+    };
+  }
+  const days = completeWeekDays(weekStart, longTermWeek?.days ?? []);
+  return {
+    weekStart,
+    days,
+    savedFingerprint: weekPlanFingerprint(defaultPlanTitle(weekStart, t), days),
+  };
+}
+
+function completeWeekDays(weekStart: string, days: WeekDayPlan[]) {
+  const daysByDate = new Map(days.map((day) => [day.scheduled_date, day]));
+  return Array.from({ length: DAYS_PER_WEEK }, (_, dayIndex) => {
+    const scheduledDate = addDaysToIso(weekStart, dayIndex);
+    const day = daysByDate.get(scheduledDate);
+    return {
+      scheduled_date: scheduledDate,
+      sessions: redateSessions(day?.sessions ?? [], scheduledDate),
+    };
+  });
+}
+
+function redateSessions(sessions: WeekRow[], scheduledDate: string) {
+  return normalizeSessionOrder(sessions.map((session) => ({ ...session, scheduled_date: scheduledDate })));
+}
+
+function buildLongTermWeeks(
+  startDate: string,
+  workouts: PlannedWorkout[],
+  draftWeeks: WeekDraft[] = [],
+  weekCount = LONG_TERM_WEEK_COUNT,
+): LongTermWeekPlan[] {
   const workoutsByDate = workouts.reduce<Map<string, PlannedWorkout[]>>((byDate, workout) => {
     const current = byDate.get(workout.scheduled_date) ?? [];
     current.push(workout);
@@ -1828,7 +2522,7 @@ function buildLongTermWeeks(startDate: string, workouts: PlannedWorkout[], draft
     return byDate;
   }, new Map());
   const draftsByWeek = new Map(draftWeeks.map((draft) => [draft.weekStart, draft]));
-  return Array.from({ length: LONG_TERM_WEEK_COUNT }, (_, weekIndex) => {
+  return Array.from({ length: weekCount }, (_, weekIndex) => {
     const weekStart = addDaysToIso(startDate, weekIndex * DAYS_PER_WEEK);
     const savedDays = Array.from({ length: DAYS_PER_WEEK }, (_, dayIndex) => {
       const scheduledDate = addDaysToIso(weekStart, dayIndex);

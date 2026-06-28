@@ -50,7 +50,7 @@ def test_event_readiness_schema_accepts_transparent_items() -> None:
 
 
 def test_event_readiness_summarizes_training_context(client, monkeypatch) -> None:
-    """Verify event readiness summarizes recent, planned, and missed training."""
+    """Verify event readiness excludes cancelled sessions from preparation totals."""
     import app.services.event_service as event_service
     from app.db.session import get_session_factory
     from app.models import Activity, Event, PlannedWorkout, User
@@ -153,6 +153,16 @@ def test_event_readiness_summarizes_training_context(client, monkeypatch) -> Non
                     target_duration_s=3000,
                     target_intensity="hard",
                     status="planned",
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=date(2026, 5, 9),
+                    workout_type="tempo",
+                    title="Cancelled future tempo",
+                    target_distance_m=Decimal("50000"),
+                    target_duration_s=18000,
+                    target_intensity="hard",
+                    status="cancelled",
                 ),
                 PlannedWorkout(
                     user_id=owner.id,

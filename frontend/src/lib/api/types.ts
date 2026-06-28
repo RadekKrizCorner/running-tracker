@@ -51,6 +51,7 @@ export type UserPreference = {
   route_start_lat: number | null;
   route_start_lng: number | null;
   route_start_label: string | null;
+  planning_week_start_date: string | null;
 };
 
 export type ElevationRecomputeResponse = {

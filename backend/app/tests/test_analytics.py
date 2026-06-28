@@ -317,6 +317,62 @@ def test_dashboard_returns_current_week_plan_comparison(client, monkeypatch) -> 
     assert {row["outcome"] for row in week_plan["rows"]} == {"different_intensity", "extra", "waiting"}
 
 
+def test_dashboard_excludes_cancelled_workouts_from_upcoming_and_plan_metrics(
+    client,
+    monkeypatch,
+) -> None:
+    """Verify cancelled workouts do not affect dashboard lists or plan aggregates."""
+    import app.services.analytics_service as analytics_service
+    from app.db.session import get_session_factory
+    from app.models import PlannedWorkout, User
+
+    setup_and_login(client)
+    monkeypatch.setattr(analytics_service, "utc_now", lambda: datetime(2026, 4, 29, 10, 0, tzinfo=UTC))
+    with get_session_factory()() as session:
+        owner = session.scalar(select(User).where(User.email == "owner@example.com"))
+        assert owner is not None
+        owner.timezone = "Europe/Prague"
+        session.add_all(
+            [
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=date(2026, 4, 30),
+                    workout_type="tempo",
+                    title="Cancelled tempo",
+                    target_distance_m=Decimal("12000"),
+                    target_duration_s=4200,
+                    target_intensity="hard",
+                    status="cancelled",
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=date(2026, 5, 1),
+                    workout_type="easy",
+                    title="Active easy run",
+                    target_distance_m=Decimal("5000"),
+                    target_duration_s=1800,
+                    target_intensity="easy",
+                    status="planned",
+                ),
+            ]
+        )
+        session.commit()
+
+    response = client.get("/api/v1/analytics/dashboard")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [workout["title"] for workout in body["upcoming_workouts"]] == ["Active easy run"]
+    assert body["week_plan"]["planned_distance_m"] == 5000
+    assert body["week_plan"]["planned_time_s"] == 1800
+    assert body["week_plan"]["planned_load"] == 60
+    assert body["week_plan"]["planned_sessions"] == 1
+    assert body["week_plan"]["remaining_distance_m"] == 5000
+    assert body["week_plan"]["remaining_time_s"] == 1800
+    assert body["week_plan"]["remaining_sessions"] == 1
+    assert [row["planned_title"] for row in body["week_plan"]["rows"]] == ["Active easy run"]
+
+
 def test_dashboard_accepts_selected_week_for_plan_comparison(client, monkeypatch) -> None:
     """Verify dashboard can show planned-versus-completed data for another week."""
     import app.services.analytics_service as analytics_service
@@ -838,7 +894,7 @@ def test_recent_weeks_split_hr_activity_by_zone_breakdown(client, monkeypatch) -
 
 
 def test_trend_metrics_expose_zone_pace_consistency_plan_and_monotony(client, monkeypatch) -> None:
-    """Verify trend metrics combine HR zones, pace, plans, consistency, and load shape."""
+    """Verify trend metrics combine training signals without cancelled plan volume."""
     import app.services.analytics_service as analytics_service
     import app.services.trend_metrics_service as trend_metrics_service
     from app.db.session import get_session_factory
@@ -905,6 +961,16 @@ def test_trend_metrics_expose_zone_pace_consistency_plan_and_monotony(client, mo
                     target_duration_s=1800,
                     target_distance_m=Decimal("6000"),
                     target_intensity="moderate",
+                ),
+                PlannedWorkout(
+                    user_id=owner.id,
+                    scheduled_date=date(2026, 4, 28),
+                    workout_type="tempo",
+                    title="Cancelled trend workout",
+                    target_duration_s=7200,
+                    target_distance_m=Decimal("50000"),
+                    target_intensity="hard",
+                    status="cancelled",
                 ),
             ]
         )

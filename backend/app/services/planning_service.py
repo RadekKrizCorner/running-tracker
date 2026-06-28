@@ -242,7 +242,7 @@ def delete_workout_template(session: Session, user: User, template_id: UUID) -> 
 
 
 def replace_week_schedule(session: Session, user: User, request: WeekScheduleRequest) -> list[PlannedWorkout]:
-    """Replace non-completed planned workouts in one owner week."""
+    """Replace active planned workouts in one owner week."""
     week_start = request.week_start_date
     week_end = week_start + timedelta(days=6)
     for entry in request.workouts:
@@ -255,7 +255,7 @@ def replace_week_schedule(session: Session, user: User, request: WeekScheduleReq
             PlannedWorkout.user_id == user.id,
             PlannedWorkout.scheduled_date >= week_start,
             PlannedWorkout.scheduled_date <= week_end,
-            PlannedWorkout.status != "completed",
+            PlannedWorkout.status == "planned",
         )
     )
     created: list[PlannedWorkout] = []
@@ -286,6 +286,7 @@ def copy_week_schedule(session: Session, user: User, request: WeekCopyRequest) -
                 PlannedWorkout.user_id == user.id,
                 PlannedWorkout.scheduled_date >= source_start,
                 PlannedWorkout.scheduled_date <= source_end,
+                PlannedWorkout.status != "cancelled",
             )
             .order_by(PlannedWorkout.scheduled_date, PlannedWorkout.sort_order, PlannedWorkout.created_at)
         )

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
 import { LanguageProvider } from '../lib/i18n';
 import { HeatmapPage } from './HeatmapPage';
@@ -39,6 +40,12 @@ describe('HeatmapPage', () => {
     expect(screen.getByTestId('run-heatmap')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Last 2 years/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /All time/i })).toHaveAttribute('aria-pressed', 'true');
+    const heatmapElement = screen.getByTestId('run-heatmap');
+    const rangeControl = screen.getByRole('button', { name: /All time/i });
+    expect(heatmapElement.compareDocumentPosition(rangeControl) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    const styles = readFileSync('src/styles/pages.css', 'utf8');
+    expect(styles).not.toMatch(/\.heatmap-page[^{}]*>[^{}]*\{[^{}]*order\s*:/);
   });
 
   test('refetches the heatmap for a quick time range', async () => {

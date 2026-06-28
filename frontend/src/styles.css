@@ -279,6 +279,12 @@ button:disabled {
   gap: 10px;
 }
 
+.notification-popover-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .text-button {
   border: 0;
   background: transparent;
@@ -1572,6 +1578,42 @@ label {
 .date-controls select,
 .inline-form input {
   width: auto;
+}
+
+.plan-range-lock {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 42px;
+  padding: 4px;
+  border: 1px solid rgba(47, 102, 208, 0.16);
+  border-radius: var(--radius);
+  background: rgba(237, 243, 255, 0.66);
+}
+
+.plan-range-lock label {
+  display: inline-grid;
+  gap: 2px;
+  min-width: 132px;
+}
+
+.plan-range-lock label span,
+.plan-range-lock small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 760;
+  line-height: 1.15;
+}
+
+.plan-range-lock input {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+.plan-range-lock small {
+  max-width: 118px;
+  color: var(--blue);
 }
 
 .auth-page,
@@ -3170,6 +3212,8 @@ td a:hover {
 .activity-map-canvas {
   position: absolute;
   inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .activity-detail-stream-layout {
@@ -3659,6 +3703,12 @@ td a:hover {
   gap: 4px;
 }
 
+.long-term-day-slot {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
 .long-term-day-button {
   display: grid;
   align-content: start;
@@ -3679,9 +3729,66 @@ td a:hover {
     transform 160ms ease;
 }
 
+.long-term-day-button.draggable {
+  padding-bottom: 34px;
+}
+
+.long-term-day-move-actions {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  display: flex;
+  gap: 4px;
+}
+
+.long-term-day-move-button {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.long-term-day-move-button:hover:not(:disabled),
+.long-term-day-move-button:focus-visible {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.long-term-day-move-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
 .long-term-day-button:hover {
   border-color: var(--border-strong);
   box-shadow: var(--shadow-soft);
+  transform: translateY(-1px);
+}
+
+.long-term-day-button.draggable {
+  cursor: grab;
+}
+
+.long-term-day-button.draggable:active {
+  cursor: grabbing;
+}
+
+.long-term-day-button.dragging {
+  opacity: 0.58;
+  transform: scale(0.98);
+}
+
+.long-term-day-button.drop-target {
+  border-color: var(--blue);
+  box-shadow:
+    0 0 0 3px rgba(47, 102, 208, 0.16),
+    var(--shadow-soft);
   transform: translateY(-1px);
 }
 
@@ -4624,9 +4731,24 @@ td a:hover {
 }
 
 .recharts-default-tooltip {
+  padding: 10px 12px !important;
   border: 1px solid var(--border) !important;
   border-radius: var(--radius) !important;
+  background: var(--surface-raised) !important;
   box-shadow: var(--shadow-soft) !important;
+  color: var(--text) !important;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.recharts-default-tooltip p {
+  margin: 0;
+}
+
+.recharts-default-tooltip .recharts-tooltip-label {
+  margin-bottom: 5px;
+  color: var(--text);
+  font-weight: 780;
 }
 
 .bottom-nav {
@@ -4914,6 +5036,19 @@ td a:hover {
   .date-controls select,
   .inline-form input {
     width: 100%;
+  }
+
+  .date-controls .plan-range-lock {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .plan-range-lock label {
+    flex: 1 1 180px;
+  }
+
+  .plan-range-lock small {
+    max-width: none;
   }
 
   .week-row-fields,

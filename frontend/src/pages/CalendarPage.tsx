@@ -27,7 +27,7 @@ export function CalendarPage() {
   const hasItems = items.length > 0;
 
   return (
-    <div className="page-stack">
+    <div className="page-stack calendar-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">{t('calendar.eyebrow')}</p>
@@ -242,7 +242,7 @@ function CalendarDayCell({
   const hiddenCount = items.length - visibleItems.length;
   const summary = summarizeItems(items);
   return (
-    <article className={`calendar-day-cell ${muted ? 'muted' : ''}`} data-testid="calendar-day">
+    <article className={`calendar-day-cell ${muted ? 'muted' : ''} ${items.length ? 'has-items' : ''}`} data-testid="calendar-day">
       <header>
         <span>{view === 'week' ? weekdayLabel(date) : monthDayLabel(date)}</span>
         <button className="calendar-open-day" type="button" aria-label={t('calendar.openDay', { date: formatDate(date) })} onClick={onOpen}>
