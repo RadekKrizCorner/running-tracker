@@ -145,6 +145,10 @@
   color: var(--green) !important;
 }
 
+.activity-mobile-sort {
+  display: none;
+}
+
 .mobile-more-header {
   display: flex;
   align-items: center;
@@ -175,6 +179,24 @@
 
   .activity-mobile-list {
     display: block;
+  }
+
+  .activity-mobile-sort {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+  }
+
+  .activity-mobile-sort label {
+    display: grid;
+    gap: 5px;
+  }
+
+  .activity-mobile-sort label > span {
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    font-weight: 750;
   }
 
   .activity-filter-panel {

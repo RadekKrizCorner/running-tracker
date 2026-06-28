@@ -66,6 +66,58 @@ export function DashboardPage() {
         ) : null}
       </section>
 
+      {dashboardMode === 'advanced' ? (
+        <section className="chart-grid">
+          <WeeklyDistanceChart weekly={data?.weekly ?? []} />
+          <WeeklyLoadChart weekly={data?.weekly ?? []} />
+          <IntensityChart weekly={data?.weekly ?? []} />
+        </section>
+      ) : null}
+
+      <section className="split-grid">
+        <div className="panel">
+          <h2>{t('dashboard.recentActivities')}</h2>
+          <div className="list-stack">
+            {(data?.recent_activities ?? []).map((activity) => (
+              <a className="activity-row" key={activity.id} href={`/activities/${activity.id}`}>
+                <Route size={18} />
+                <div>
+                  <strong>{activity.name ?? t('activity.run')}</strong>
+                  <span>{formatDistance(activity.distance_m)} · {formatDuration(activity.moving_time_s)}</span>
+                  <small className="activity-provider">{t('activities.syncedFromStrava')}</small>
+                </div>
+                <small>{enumLabel(t, 'intensity', activity.intensity_class ?? 'unknown')}</small>
+              </a>
+            ))}
+          </div>
+        </div>
+        <div className="panel">
+          <h2>{t('dashboard.upcomingWorkouts')}</h2>
+          <div className="list-stack">
+            {(data?.upcoming_workouts ?? []).map((workout) => (
+              <div className="activity-row" key={workout.id ?? `${workout.scheduled_date}-${workout.title}`}>
+                <Clock size={18} />
+                <div>
+                  <strong>{workout.title}</strong>
+                  <span>{formatDate(workout.scheduled_date)} · {enumLabel(t, 'intensity', workout.target_intensity ?? 'free')}</span>
+                </div>
+                <small>{enumLabel(t, 'status', workout.status)}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {selectedWeekPlan ? (
+        <WeekPlanPanel
+          weekPlan={selectedWeekPlan}
+          isShifted={selectedWeekStart !== null}
+          onPreviousWeek={() => setSelectedWeekStart(addWeeksIso(selectedWeekPlan.week_start_date, -1))}
+          onCurrentWeek={() => setSelectedWeekStart(null)}
+          onNextWeek={() => setSelectedWeekStart(addWeeksIso(selectedWeekPlan.week_start_date, 1))}
+        />
+      ) : null}
+
       {strava.data?.connected ? (
         <div className="header-actions dashboard-sync-actions">
           <button
@@ -144,60 +196,7 @@ export function DashboardPage() {
         }
       />
 
-      {selectedWeekPlan ? (
-        <WeekPlanPanel
-          weekPlan={selectedWeekPlan}
-          isShifted={selectedWeekStart !== null}
-          onPreviousWeek={() => setSelectedWeekStart(addWeeksIso(selectedWeekPlan.week_start_date, -1))}
-          onCurrentWeek={() => setSelectedWeekStart(null)}
-          onNextWeek={() => setSelectedWeekStart(addWeeksIso(selectedWeekPlan.week_start_date, 1))}
-        />
-      ) : null}
-
-      {dashboardMode === 'advanced' ? (
-        <>
-          <section className="chart-grid">
-            <WeeklyDistanceChart weekly={data?.weekly ?? []} />
-            <WeeklyLoadChart weekly={data?.weekly ?? []} />
-            <IntensityChart weekly={data?.weekly ?? []} />
-          </section>
-          <AnalyticsGlossary />
-        </>
-      ) : null}
-
-      <section className="split-grid">
-        <div className="panel">
-          <h2>{t('dashboard.recentActivities')}</h2>
-          <div className="list-stack">
-            {(data?.recent_activities ?? []).map((activity) => (
-              <a className="activity-row" key={activity.id} href={`/activities/${activity.id}`}>
-                <Route size={18} />
-                <div>
-                  <strong>{activity.name ?? t('activity.run')}</strong>
-                  <span>{formatDistance(activity.distance_m)} · {formatDuration(activity.moving_time_s)}</span>
-                  <small className="activity-provider">{t('activities.syncedFromStrava')}</small>
-                </div>
-                <small>{enumLabel(t, 'intensity', activity.intensity_class ?? 'unknown')}</small>
-              </a>
-            ))}
-          </div>
-        </div>
-        <div className="panel">
-          <h2>{t('dashboard.upcomingWorkouts')}</h2>
-          <div className="list-stack">
-            {(data?.upcoming_workouts ?? []).map((workout) => (
-              <div className="activity-row" key={workout.id ?? `${workout.scheduled_date}-${workout.title}`}>
-                <Clock size={18} />
-                <div>
-                  <strong>{workout.title}</strong>
-                  <span>{formatDate(workout.scheduled_date)} · {enumLabel(t, 'intensity', workout.target_intensity ?? 'free')}</span>
-                </div>
-                <small>{enumLabel(t, 'status', workout.status)}</small>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {dashboardMode === 'advanced' ? <AnalyticsGlossary /> : null}
 
       <section className="insight-strip">
         <TrendingUp size={18} />

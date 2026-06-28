@@ -24,12 +24,46 @@ describe('PlansPage', () => {
     }));
     renderPlansPage();
 
-    const tabs = await screen.findByRole('tablist', { name: /Plan view/i });
-    expect(within(tabs).getByRole('tab', { name: /^Week$/i })).toHaveAttribute('aria-selected', 'true');
-    expect(within(tabs).getByRole('tab', { name: /^Outlook$/i })).toBeInTheDocument();
-    expect(within(tabs).getByRole('tab', { name: /^Library$/i })).toBeInTheDocument();
+    const viewControls = await screen.findByRole('group', { name: /Plan view/i });
+    expect(within(viewControls).getByRole('button', { name: /^Week$/i })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(viewControls).getByRole('button', { name: /^Outlook$/i })).toHaveAttribute('aria-pressed', 'false');
+    expect(within(viewControls).getByRole('button', { name: /^Library$/i })).not.toHaveAttribute('aria-pressed');
     expect(screen.getByTestId('plan-week-schedule')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /mark complete|complete workout|start workout/i })).not.toBeInTheDocument();
+  });
+
+  test('defers long-term calendar and analytics requests until Outlook is selected', async () => {
+    const currentWeek = weekStartIso();
+    const longTermEnd = addDaysToIso(currentWeek, 83);
+    const plannedOutlookStart = addDaysToIso(currentWeek, -28);
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/workout-templates') || url.includes('/workout-pool') || url.includes('/analytics/')) {
+        return Promise.resolve(jsonResponse([]));
+      }
+      if (url.includes('/profile/preferences')) {
+        return Promise.resolve(jsonResponse(defaultPreferences()));
+      }
+      return Promise.resolve(jsonResponse({ planned_workouts: [], activities: [], events: [] }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPlansPage();
+
+    await screen.findByRole('heading', { name: /Weekly plan/i });
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes(`end_date=${longTermEnd}`))).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/analytics/'))).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${currentWeek}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining(`/calendar?start_date=${plannedOutlookStart}&end_date=${longTermEnd}`),
+        expect.objectContaining({ credentials: 'include' }),
+      );
+      expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/analytics/recent-weeks?weeks=6'))).toBe(true);
+    });
   });
 
   test('saves a week from a selected workout template', async () => {
@@ -795,6 +829,7 @@ describe('PlansPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     renderPlansPage();
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
 
     expect(await screen.findByRole('heading', { name: /Long-term plan/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /Mileage and time outlook/i })).toBeInTheDocument();
@@ -856,6 +891,7 @@ describe('PlansPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     renderPlansPage();
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
 
     expect(await screen.findByRole('heading', { name: /Long-term plan/i })).toBeInTheDocument();
     await waitFor(() => {
@@ -900,6 +936,7 @@ describe('PlansPage', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     renderPlansPage();
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
 
     expect(await screen.findByRole('heading', { name: /Long-term plan/i })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText(/Plan range start/i)).toHaveValue(lockedStart));
@@ -945,6 +982,7 @@ describe('PlansPage', () => {
     const horizonInput = container.querySelector('.date-controls input[type="date"]') as HTMLInputElement;
     expect(horizonInput).not.toBeNull();
     fireEvent.change(horizonInput, { target: { value: historicalHorizon } });
+    await userEvent.click(screen.getByRole('button', { name: /^Outlook$/i }));
 
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(

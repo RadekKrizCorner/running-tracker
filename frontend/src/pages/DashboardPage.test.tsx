@@ -13,6 +13,7 @@ describe('DashboardPage', () => {
   test('keeps supporting metrics and all advanced charts visible in responsive styles', () => {
     const styles = readFileSync('src/styles/components.css', 'utf8');
 
+    expect(styles).not.toMatch(/\.dashboard-page[^{}]*>[^{}]*\{[^{}]*order\s*:/);
     expect(styles).not.toMatch(/\.dashboard-secondary-metrics\s*\{\s*display:\s*none;/);
     expect(styles).not.toMatch(/\.dashboard-page\s*>\s*\.chart-grid\s*>\s*:nth-child\(3\)\s*\{\s*display:\s*none;/);
     expect(styles).not.toMatch(

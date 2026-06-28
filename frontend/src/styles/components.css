@@ -177,19 +177,6 @@
   background: var(--border);
 }
 
-.dashboard-page > .today-brief { order: 0; }
-.dashboard-page > .dashboard-secondary-metrics { order: 1; }
-.dashboard-page > .chart-grid { order: 2; }
-.dashboard-page > .split-grid { order: 3; }
-.dashboard-page > .week-plan-panel { order: 4; }
-.dashboard-page > .empty-state,
-.dashboard-page > .header-actions,
-.dashboard-page > .sync-banner,
-.dashboard-page > .onboarding-checklist,
-.dashboard-page > .plan-overview,
-.dashboard-page > .analytics-glossary,
-.dashboard-page > .insight-strip { order: 5; }
-
 .dashboard-secondary-metrics .metric-card {
   min-height: 0;
   border: 0;

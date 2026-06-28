@@ -29,6 +29,20 @@ describe('ActivitiesPage', () => {
     });
   });
 
+  test('provides mobile sorting controls for field and direction', async () => {
+    const fetchMock = stubActivitiesFetch([activityResponse({ name: 'Mobile sort run' })]);
+    const user = userEvent.setup();
+
+    renderActivitiesPage();
+
+    await screen.findAllByText(/Mobile sort run/i);
+    await user.selectOptions(screen.getByRole('combobox', { name: /Sort activities by/i }), 'distance');
+    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('sort=-distance'));
+
+    await user.click(screen.getByRole('button', { name: /Sort direction: descending/i }));
+    await waitFor(() => expect(lastFetchUrl(fetchMock)).toContain('sort=distance'));
+  });
+
   test('renders an integration-sourced mobile list without manual activity actions', async () => {
     stubActivitiesFetch([activityResponse({ name: 'Morning run', provider: 'strava' })]);
 

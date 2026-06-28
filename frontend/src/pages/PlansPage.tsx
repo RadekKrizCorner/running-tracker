@@ -374,17 +374,21 @@ export function PlansPage() {
     ? weekCountInclusive(planningOutlookRangeStart, longTermEnd)
     : 0;
   const lockedRangeIntersectsHorizon = lockedPlanStart !== null && lockedPlanStart <= longTermEnd;
-  const longTermCalendar = useCalendar(horizonStart, longTermEnd);
+  const outlookActive = planView === 'outlook';
+  const longTermCalendar = useCalendar(horizonStart, longTermEnd, outlookActive);
   const planningOutlookCalendar = useCalendar(
     planningOutlookRangeStart,
     longTermEnd,
-    planningPreferencesResolved && planningOutlookIntersectsHorizon,
+    outlookActive && planningPreferencesResolved && planningOutlookIntersectsHorizon,
   );
-  const recentLoadWeeks = useRecentWeeklyAnalytics(6, planningPreferencesResolved && lockedPlanStart === null);
+  const recentLoadWeeks = useRecentWeeklyAnalytics(
+    6,
+    outlookActive && planningPreferencesResolved && lockedPlanStart === null,
+  );
   const lockedLoadWeeks = useWeeklyAnalyticsRange(
     lockedRangeIntersectsHorizon ? lockedPlanStart : null,
     longTermEnd,
-    lockedRangeIntersectsHorizon,
+    outlookActive && lockedRangeIntersectsHorizon,
   );
   const saveWeek = useSaveWeekSchedule();
   const createTemplate = useCreateWorkoutTemplate();
@@ -475,22 +479,32 @@ export function PlansPage() {
       ? t('plans.saveWeeks', { count: dirtyWeekDrafts.length })
       : t('plans.saveWeek');
   const longTermWeeks = useMemo(
-    () => buildLongTermWeeks(horizonStart, longTermCalendar.data?.planned_workouts ?? [], dirtyWeekDrafts),
-    [dirtyWeekDrafts, horizonStart, longTermCalendar.data?.planned_workouts],
+    () => buildLongTermWeeks(
+      horizonStart,
+      (outlookActive ? longTermCalendar.data : calendar.data)?.planned_workouts ?? [],
+      dirtyWeekDrafts,
+    ),
+    [calendar.data, dirtyWeekDrafts, horizonStart, longTermCalendar.data, outlookActive],
   );
   const plannedOutlookWeeks = useMemo(
-    () =>
-      buildLongTermWeeks(
+    () => {
+      if (!outlookActive) {
+        return [];
+      }
+      return buildLongTermWeeks(
         planningOutlookRangeStart,
         planningOutlookCalendar.data?.planned_workouts ?? [],
         dirtyWeekDrafts,
         planningOutlookWeekCount,
-      ),
-    [dirtyWeekDrafts, planningOutlookCalendar.data?.planned_workouts, planningOutlookRangeStart, planningOutlookWeekCount],
+      );
+    },
+    [dirtyWeekDrafts, outlookActive, planningOutlookCalendar.data?.planned_workouts, planningOutlookRangeStart, planningOutlookWeekCount],
   );
-  const activeLoadWeeks = lockedPlanStart
-    ? (lockedRangeIntersectsHorizon ? lockedLoadWeeks.data : [])
-    : recentLoadWeeks.data;
+  const activeLoadWeeks = !outlookActive
+    ? []
+    : (lockedPlanStart
+        ? (lockedRangeIntersectsHorizon ? lockedLoadWeeks.data : [])
+        : recentLoadWeeks.data);
   const historicalLoadWeeks = Array.isArray(activeLoadWeeks) ? activeLoadWeeks : [];
 
   useEffect(() => {
@@ -1100,12 +1114,11 @@ export function PlansPage() {
         </div>
       </header>
 
-      <div className="plan-view-tabs" role="tablist" aria-label={t('plans.planView')}>
+      <div className="plan-view-tabs" role="group" aria-label={t('plans.planView')}>
         <button
           className={planView === 'week' ? 'active' : ''}
           type="button"
-          role="tab"
-          aria-selected={planView === 'week'}
+          aria-pressed={planView === 'week'}
           onClick={() => setPlanView('week')}
         >
           {t('plans.weekView')}
@@ -1113,16 +1126,13 @@ export function PlansPage() {
         <button
           className={planView === 'outlook' ? 'active' : ''}
           type="button"
-          role="tab"
-          aria-selected={planView === 'outlook'}
+          aria-pressed={planView === 'outlook'}
           onClick={() => setPlanView('outlook')}
         >
           {t('plans.outlookView')}
         </button>
         <button
           type="button"
-          role="tab"
-          aria-selected="false"
           onClick={() => setTemplateLibraryOpen(true)}
         >
           {t('plans.libraryView')}

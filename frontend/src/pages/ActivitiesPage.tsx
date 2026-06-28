@@ -19,6 +19,16 @@ const activityRangePresets: { id: Exclude<ActivityRangeId, 'custom'>; labelKey: 
   { id: '12m', labelKey: 'activities.range12m' },
 ];
 
+const activitySortOptions: { id: ActivitySortKey; labelKey: string }[] = [
+  { id: 'start_time', labelKey: 'common.date' },
+  { id: 'distance', labelKey: 'common.distance' },
+  { id: 'moving_time', labelKey: 'common.time' },
+  { id: 'pace', labelKey: 'common.pace' },
+  { id: 'elevation_gain', labelKey: 'common.elevation' },
+  { id: 'average_hr', labelKey: 'activities.avgHr' },
+  { id: 'computed_load', labelKey: 'common.load' },
+];
+
 export function ActivitiesPage() {
   const { t } = useTranslation();
   const [intensity, setIntensity] = useState('');
@@ -39,6 +49,8 @@ export function ActivitiesPage() {
     start_date: activeRangeDates.startDate,
     end_date: activeRangeDates.endDate,
   });
+  const activeSortKey = sort.replace(/^-/, '') as ActivitySortKey;
+  const sortDescending = sort.startsWith('-');
   const hasFilters = Boolean(intensity || search.trim() || activeRange !== 'all' || sort !== '-start_time');
   const activateCustomStartDate = (value: string) => {
     setActiveRange('custom');
@@ -136,6 +148,31 @@ export function ActivitiesPage() {
           </button>
         ) : null}
       </section>
+      <div className="activity-mobile-sort" role="group" aria-label={t('activities.mobileSort')}>
+        <label>
+          <span>{t('activities.sortField')}</span>
+          <select
+            aria-label={t('activities.mobileSort')}
+            value={activeSortKey}
+            onChange={(event) => setSort(defaultSortValue(event.target.value as ActivitySortKey))}
+          >
+            {activitySortOptions.map((option) => (
+              <option key={option.id} value={option.id}>{t(option.labelKey)}</option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="secondary-button compact"
+          type="button"
+          aria-label={t('activities.sortDirectionLabel', {
+            direction: t(sortDescending ? 'activities.sortDescending' : 'activities.sortAscending'),
+          })}
+          onClick={() => setSort(sortDescending ? activeSortKey : `-${activeSortKey}`)}
+        >
+          {sortDescending ? <ArrowDown size={16} aria-hidden="true" /> : <ArrowUp size={16} aria-hidden="true" />}
+          {t(sortDescending ? 'activities.sortDescending' : 'activities.sortAscending')}
+        </button>
+      </div>
       {activities.isLoading ? <div className="screen-center">{t('common.loadingActivities')}</div> : null}
       {!activities.isLoading && activities.data?.length === 0 ? (
         <EmptyState title={t('activities.noMatching')} detail={t('activities.noMatchingDetail')} />
@@ -226,6 +263,10 @@ function nextSortValue(currentSort: string, sortKey: ActivitySortKey, defaultDir
     return defaultDirection === 'descending' ? `-${sortKey}` : sortKey;
   }
   return currentDirection === 'descending' ? sortKey : `-${sortKey}`;
+}
+
+function defaultSortValue(sortKey: ActivitySortKey) {
+  return sortKey === 'pace' ? sortKey : `-${sortKey}`;
 }
 
 function sortDirectionFor(sortKey: ActivitySortKey, sort: string): SortDirection {
