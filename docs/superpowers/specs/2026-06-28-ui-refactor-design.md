@@ -33,6 +33,7 @@ The refactor succeeds when:
 - No change to load, intensity, readiness, adherence, or trend formulas.
 - No replacement of Recharts or MapLibre unless an implementation phase proves a blocking limitation.
 - No free-form report canvas, coaching AI, social feed, team workspace, or sharing expansion.
+- No live workout tracking, `Start workout`, `Log activity`, or manual activity-creation flow. Completed activities enter through configured integrations such as Strava.
 - No route-path migration or deletion of existing deep links.
 
 ## 4. Approved Product Direction
@@ -209,6 +210,8 @@ The dashboard reading order is:
 Simple mode shows the first six items with only essential metrics. Advanced mode adds load, intensity, readiness, and up to two priority charts. Neither mode hides errors, incomplete sync, or plan problems.
 
 The onboarding checklist appears only while incomplete and can be collapsed. It does not occupy the primary dashboard position after the owner has usable data.
+
+The Today workout panel is informational and planning-oriented. It may link to the existing planned-workout detail or Plan surface, but it must not offer `Start workout`, live tracking, or manual activity logging. Completion appears after an imported provider activity is synchronized and matched.
 
 ### 8.2 Calendar
 
@@ -572,6 +575,8 @@ Each plan must preserve compatibility with previously migrated routes, define it
 ## 16. Mock Frame Plan
 
 After this specification is accepted, generate exactly three independent visual directions grounded in the audit screenshots and this approved design system. Each direction should show the same representative Today/dashboard surface so hierarchy and styling can be compared fairly. The options vary layout strategy and emphasis while preserving the approved pine, warm-neutral, green/blue analytical direction.
+
+Mock frames must not introduce `Start workout`, `Log activity`, `Quick add run`, live workout tracking, or manual activity creation. The only workout actions may navigate to existing planning details, and completed activity data is presented as integration-sourced.
 
 After the user selects one direction, produce a consistent final mock set for at least:
 
