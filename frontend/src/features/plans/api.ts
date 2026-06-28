@@ -18,9 +18,10 @@ type CalendarEventPayload = {
   notes?: string | null;
 };
 
-export function useCalendar(startDate: string, endDate: string) {
+export function useCalendar(startDate: string, endDate: string, enabled = true) {
   return useQuery({
     queryKey: ['calendar', { startDate, endDate }],
+    enabled,
     queryFn: () => apiRequest<CalendarResponse>(`/calendar?start_date=${startDate}&end_date=${endDate}`),
   });
 }

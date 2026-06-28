@@ -9,12 +9,14 @@ import type {
   YearlyRunningSummary,
 } from '../../lib/api/types';
 
-export type RunHeatmapFilters = {
+export type DateRangeFilters = {
   start_date?: string;
   end_date?: string;
 };
 
-function queryString(filters: RunHeatmapFilters) {
+export type RunHeatmapFilters = DateRangeFilters;
+
+function queryString(filters: DateRangeFilters) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([key, value]) => {
     if (value) {
@@ -31,9 +33,22 @@ export function useWeeklyAnalytics() {
   });
 }
 
-export function useRecentWeeklyAnalytics(weeks = 4) {
+export function useWeeklyAnalyticsRange(startDate: string | null, endDate: string | null, enabled = true) {
+  const qs = queryString({
+    start_date: startDate ?? undefined,
+    end_date: endDate ?? undefined,
+  });
+  return useQuery({
+    queryKey: ['weeklyAnalytics', 'range', startDate, endDate],
+    enabled: enabled && Boolean(qs),
+    queryFn: () => apiRequest<WeeklyMetric[]>(`/analytics/weekly?${qs}`),
+  });
+}
+
+export function useRecentWeeklyAnalytics(weeks = 4, enabled = true) {
   return useQuery({
     queryKey: ['recentWeeklyAnalytics', weeks],
+    enabled,
     queryFn: () => apiRequest<WeeklyMetric[]>(`/analytics/recent-weeks?weeks=${weeks}`),
   });
 }

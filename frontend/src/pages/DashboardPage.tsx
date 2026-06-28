@@ -6,6 +6,7 @@ import { MetricCard } from '../components/ui/MetricCard';
 import { ProgressMeter } from '../components/ui/ProgressMeter';
 import { StatusPill } from '../components/ui/StatusPill';
 import { RunnerScene } from '../components/visuals/RunnerScene';
+import { TodayBrief } from '../components/dashboard/TodayBrief';
 import {
   useStravaStatus,
   useStravaSync,
@@ -53,7 +54,9 @@ export function DashboardPage() {
 
   return (
     <div className="page-stack dashboard-page">
-      <section className="metric-grid">
+      <TodayBrief data={data} />
+
+      <section className="metric-grid dashboard-secondary-metrics">
         <MetricCard label={t('common.distance')} value={formatDistance(data?.this_week.distance_m)} detail={t('dashboard.thisWeek')} />
         <MetricCard label={t('dashboard.movingTime')} value={formatDuration(data?.this_week.moving_time_s)} detail={t('dashboard.thisWeek')} />
         <MetricCard label={t('dashboard.runs')} value={`${data?.this_week.run_count ?? 0}`} detail={t('common.completed')} />
@@ -175,6 +178,7 @@ export function DashboardPage() {
                 <div>
                   <strong>{activity.name ?? t('activity.run')}</strong>
                   <span>{formatDistance(activity.distance_m)} · {formatDuration(activity.moving_time_s)}</span>
+                  <small className="activity-provider">{t('activities.syncedFromStrava')}</small>
                 </div>
                 <small>{enumLabel(t, 'intensity', activity.intensity_class ?? 'unknown')}</small>
               </a>

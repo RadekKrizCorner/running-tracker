@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, test } from 'vitest';
 import { DurabilityChart, EasyRunEfficiencyChart, IntensityChart, WeeklyLoadChart, WeeklyLoadVolumeChart, buildDurabilityChartData } from './WeeklyCharts';
@@ -75,6 +76,14 @@ describe('WeeklyCharts', () => {
     expect(screen.getByText(/Easy-run efficiency trend/i)).toBeInTheDocument();
     expect(screen.getByText(/Pace/i)).toBeInTheDocument();
     expect(screen.getByText(/Heart rate/i)).toBeInTheDocument();
+  });
+
+  test('keeps chart tooltips opaque and padded over dense line charts', () => {
+    const styles = readFileSync('src/styles.css', 'utf8');
+    const tooltipRule = styles.match(/(?:^|\n)\.recharts-default-tooltip\s*\{(?<body>[^}]*)\}/m);
+
+    expect(tooltipRule?.groups?.body).toContain('background: var(--surface-raised)');
+    expect(tooltipRule?.groups?.body).toContain('padding: 10px 12px');
   });
 
   test('renders intensity chart with all split labels', () => {

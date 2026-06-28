@@ -27,7 +27,7 @@ export function CalendarPage() {
   const hasItems = items.length > 0;
 
   return (
-    <div className="page-stack">
+    <div className="page-stack calendar-page">
       <header className="page-header">
         <div>
           <p className="eyebrow">{t('calendar.eyebrow')}</p>

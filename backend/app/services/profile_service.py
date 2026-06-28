@@ -62,6 +62,7 @@ def get_or_create_user_preferences(session: Session, user: User) -> UserPreferen
         route_start_lat=None,
         route_start_lng=None,
         route_start_label=None,
+        planning_week_start_date=None,
     )
     session.add(preferences)
     session.commit()
@@ -82,6 +83,7 @@ def update_user_preferences(session: Session, user: User, payload: UserPreferenc
         "route_start_lat",
         "route_start_lng",
         "route_start_label",
+        "planning_week_start_date",
     }
     for key, value in updates.items():
         if value is not None or key in nullable_preference_fields:

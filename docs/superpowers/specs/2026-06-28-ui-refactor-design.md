@@ -1,7 +1,7 @@
 # Running Tracker UI Refactor Design
 
 Date: 2026-06-28  
-Status: Written from the approved design; pending written-spec review  
+Status: Approved design with selected visual direction 3 (`Training Brief`)
 Related evidence: [`docs/ui-audit-2026-06-27/audit.md`](../../ui-audit-2026-06-27/audit.md)
 
 ## 1. Purpose
@@ -587,6 +587,10 @@ After the user selects one direction, produce a consistent final mock set for at
 
 The selected mock direction becomes the visual contract for implementation and browser design QA.
 
+Selected direction: **3 — Training Brief**. It uses the dark-pine grouped navigation, warm neutral application surface, editorial Today headline, compact evidence tables, restrained green/blue data visualization, amber planned-workout treatment, and explicit `Synced from Strava` provenance. It does not expose manual workout start, live tracking, or activity creation.
+
+Final mock artifacts live in [`docs/ui-refactor-mockups-2026-06-28/`](../../ui-refactor-mockups-2026-06-28/).
+
 ## 17. Design Review
 
 Rating: 9/10.
@@ -603,4 +607,4 @@ Residual risk:
 
 - Planning and Report Builder are large, stateful surfaces with the highest regression potential.
 - Complete accessibility conformance depends on implementation and assistive-technology testing.
-- A selected visual mock direction is still required before implementation styling is considered final.
+- The selected visual contract still requires browser-based design QA during implementation so rendered screens match its hierarchy, density, and responsive behavior.

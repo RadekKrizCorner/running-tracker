@@ -16,6 +16,7 @@ def test_owner_preferences_can_be_read_and_updated(client) -> None:
     assert initial.json()["route_start_lat"] is None
     assert initial.json()["route_start_lng"] is None
     assert initial.json()["route_start_label"] is None
+    assert initial.json()["planning_week_start_date"] is None
 
     response = client.patch(
         "/api/v1/profile/preferences",
@@ -48,6 +49,31 @@ def test_owner_preferences_can_be_read_and_updated(client) -> None:
     assert persisted.json()["dashboard_mode"] == "simple"
     assert persisted.json()["route_start_lat"] == 49.2893614
     assert persisted.json()["route_start_lng"] == 16.0977864
+
+
+def test_owner_preferences_store_planning_week_start(client) -> None:
+    """Verify planning range lock is normalized and persisted."""
+    setup_and_login(client)
+
+    response = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": "2026-05-20"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["planning_week_start_date"] == "2026-05-18"
+
+    persisted = client.get("/api/v1/profile/preferences")
+    assert persisted.status_code == 200
+    assert persisted.json()["planning_week_start_date"] == "2026-05-18"
+
+    reset = client.patch(
+        "/api/v1/profile/preferences",
+        json={"planning_week_start_date": None},
+    )
+
+    assert reset.status_code == 200
+    assert reset.json()["planning_week_start_date"] is None
 
 
 def test_owner_preferences_persist_avatar_choice(client) -> None:

@@ -53,7 +53,7 @@ export function HeatmapPage() {
   };
 
   return (
-    <div className="page-stack">
+    <div className="page-stack heatmap-page">
       <header className="visual-page-hero heatmap">
         <div>
           <p className="eyebrow">{t('heatmap.eyebrow')}</p>

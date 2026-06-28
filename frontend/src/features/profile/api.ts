@@ -58,6 +58,8 @@ export function useUpdateUserPreferences() {
     onSuccess: (preferences) => {
       queryClient.setQueryData(['userPreferences'], preferences);
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['weeklyAnalytics'] });
+      queryClient.invalidateQueries({ queryKey: ['recentWeeklyAnalytics'] });
     },
   });
 }

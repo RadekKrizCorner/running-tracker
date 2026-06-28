@@ -6,6 +6,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic_core import PydanticCustomError
 
+from app.core.time import week_start
+
 AVATAR_ICON_IDS = {
     "runner_route",
     "stopwatch",
@@ -140,6 +142,7 @@ class UserPreferenceRead(BaseModel):
     route_start_lat: float | None = None
     route_start_lng: float | None = None
     route_start_label: str | None = None
+    planning_week_start_date: date | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -160,6 +163,7 @@ class UserPreferenceUpdate(BaseModel):
     route_start_lat: float | None = Field(default=None, ge=-90, le=90)
     route_start_lng: float | None = Field(default=None, ge=-180, le=180)
     route_start_label: str | None = Field(default=None, max_length=255)
+    planning_week_start_date: date | None = None
 
     @field_validator("locale")
     @classmethod
@@ -224,6 +228,14 @@ class UserPreferenceUpdate(BaseModel):
             return None
         cleaned = value.strip()
         return cleaned or None
+
+    @field_validator("planning_week_start_date")
+    @classmethod
+    def normalize_planning_week_start_date(cls, value: date | None) -> date | None:
+        """Normalize planning range start dates to week starts."""
+        if value is None:
+            return None
+        return week_start(value)
 
 
 class ElevationRecomputeResponse(BaseModel):

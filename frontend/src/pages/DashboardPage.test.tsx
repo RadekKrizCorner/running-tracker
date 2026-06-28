@@ -9,6 +9,96 @@ import { LanguageProvider } from '../lib/i18n';
 import { DashboardPage } from './DashboardPage';
 
 describe('DashboardPage', () => {
+  test('presents the plan as information and imported activities as integration data', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/connections/strava/status')) {
+          return Promise.resolve(jsonResponse({
+            connected: true,
+            status: 'connected',
+            provider_user_id: '1',
+            scopes_granted: ['read', 'activity:read_all'],
+            missing_scopes: [],
+            access_token_expires_at: null,
+            last_sync_at: '2026-06-28T06:00:00Z',
+            last_error: null,
+            active_job_id: null,
+          }));
+        }
+        return Promise.resolve(jsonResponse({
+          ...dashboardFixture(),
+          recent_activities: [{ id: 'a1', name: 'Easy run', sport_type: 'Run', start_time_utc: '2026-06-28T06:00:00Z', distance_m: 8200, moving_time_s: 2772, computed_load: 60, intensity_class: 'easy' }],
+          upcoming_workouts: [{ id: 'p1', scheduled_date: '2026-06-28', title: 'Long run', workout_type: 'long', target_distance_m: 18000, target_duration_s: 7200, target_intensity: 'moderate', status: 'planned' }],
+        }));
+      }),
+    );
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <LanguageProvider initialLocale="en-US">
+          <MemoryRouter>
+            <DashboardPage />
+          </MemoryRouter>
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: /Long run planned today/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open plan details/i })).toHaveAttribute('href', '/plans');
+    expect(screen.getByText(/Synced from Strava/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /start workout|start run|log activity/i })).not.toBeInTheDocument();
+  });
+
+  test('does not present a future workout as planned for today', async () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/connections/strava/status')) {
+          return Promise.resolve(jsonResponse({
+            connected: true,
+            status: 'connected',
+            provider_user_id: '1',
+            scopes_granted: ['read', 'activity:read_all'],
+            missing_scopes: [],
+            access_token_expires_at: null,
+            last_sync_at: null,
+            last_error: null,
+            active_job_id: null,
+          }));
+        }
+        return Promise.resolve(jsonResponse({
+          ...dashboardFixture(),
+          upcoming_workouts: [{
+            id: 'future-plan',
+            scheduled_date: toIsoDate(tomorrow),
+            title: 'Tomorrow long run',
+            workout_type: 'long',
+            target_distance_m: 18000,
+            target_duration_s: 7200,
+            target_intensity: 'moderate',
+            status: 'planned',
+          }],
+        }));
+      }),
+    );
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <LanguageProvider initialLocale="en-US">
+          <MemoryRouter>
+            <DashboardPage />
+          </MemoryRouter>
+        </LanguageProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByRole('heading', { name: /No run is planned for today/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Tomorrow long run planned today/i)).not.toBeInTheDocument();
+  });
+
   test('renders empty state when no activities exist', async () => {
     vi.stubGlobal(
       'fetch',
@@ -186,7 +276,7 @@ describe('DashboardPage', () => {
 
     expect(await screen.findByText(/Current week progress/i)).toBeInTheDocument();
     expect(container.querySelector('.dashboard-hero')).not.toBeInTheDocument();
-    expect(container.querySelector('.dashboard-page')?.firstElementChild).toHaveClass('metric-grid');
+    expect(container.querySelector('.dashboard-page')?.firstElementChild).toHaveClass('today-brief');
     expect(screen.queryByRole('heading', { name: /^Dashboard$/i })).not.toBeInTheDocument();
     expect(screen.getByText(/Different intensity/i)).toBeInTheDocument();
     expect(screen.getByText(/Monday, 4\/27\/2026/i)).toBeInTheDocument();
@@ -453,7 +543,7 @@ describe('DashboardPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /Previous week/i }));
 
     expect(await screen.findByText(/4\/20\/2026 to 4\/26\/2026/i)).toBeInTheDocument();
-    expect(screen.getByText(/Previous week easy/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Previous week easy/i).length).toBeGreaterThan(0);
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining('week_start_date=2026-04-20'),
       expect.any(Object),
@@ -813,7 +903,8 @@ describe('DashboardPage', () => {
     expect(await screen.findByText(/Recent activities/i)).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: /Dashboard mode/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Simple/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/Weekly load/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Weekly load/i)).toBeInTheDocument();
+    expect(document.querySelector('.chart-grid')).not.toBeInTheDocument();
   });
 
   test('resumes active sync progress from connection status', async () => {

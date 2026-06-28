@@ -8,6 +8,35 @@ import { toIsoDate } from '../../lib/date';
 import { AppShell } from './AppShell';
 
 describe('AppShell', () => {
+  test('groups desktop navigation and exposes the five approved mobile destinations', async () => {
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(jsonResponse(responseForAppShellUrl(url)))));
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/dashboard']}>
+          <AppShell user={{ id: 'u1', email: 'owner@example.com', display_name: null, timezone: 'Europe/Prague', units: 'metric' }}>
+            <div>Page content</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const desktopNav = screen.getByRole('navigation', { name: /Hlavní navigace/i });
+    expect(within(desktopNav).getByText('DNES')).toBeInTheDocument();
+    expect(within(desktopNav).getByText('TRÉNINK')).toBeInTheDocument();
+    expect(within(desktopNav).getByText('PROGRES')).toBeInTheDocument();
+    expect(within(desktopNav).getByText('NÁSTROJE')).toBeInTheDocument();
+    expect(within(desktopNav).getByText('ÚČET')).toBeInTheDocument();
+
+    const mobileNav = screen.getByRole('navigation', { name: /Mobilní navigace/i });
+    expect(within(mobileNav).getAllByRole('link')).toHaveLength(4);
+    expect(within(mobileNav).getByRole('link', { name: /^Dnes$/i })).toBeInTheDocument();
+    expect(within(mobileNav).getByRole('link', { name: /^Plány$/i })).toBeInTheDocument();
+    expect(within(mobileNav).getByRole('link', { name: /^Aktivity$/i })).toBeInTheDocument();
+    expect(within(mobileNav).getByRole('link', { name: /^Progres$/i })).toBeInTheDocument();
+    expect(within(mobileNav).getByRole('button', { name: /^Více$/i })).toBeInTheDocument();
+  });
+
   test('collapses the desktop sidebar into an icon rail and expands it again', async () => {
     vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(jsonResponse(responseForAppShellUrl(url)))));
     const queryClient = new QueryClient();
@@ -44,6 +73,82 @@ describe('AppShell', () => {
     expect(sidebar).not.toHaveClass('collapsed');
   });
 
+  test('remembers the desktop sidebar drawer state after remounting the shell', async () => {
+    const localStorageMock = createLocalStorageMock();
+    vi.stubGlobal('localStorage', localStorageMock);
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      value: localStorageMock,
+    });
+    vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve(jsonResponse(responseForAppShellUrl(url)))));
+    const renderShell = () =>
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter initialEntries={['/plans']}>
+            <AppShell user={{ id: 'u1', email: 'owner@example.com', display_name: null, timezone: 'Europe/Prague', units: 'metric' }}>
+              <div>Page content</div>
+            </AppShell>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+    const firstRender = renderShell();
+    await userEvent.click(screen.getByRole('button', { name: /Sbalit menu/i }));
+
+    expect(screen.getByTestId('app-shell')).toHaveClass('sidebar-collapsed');
+    expect(window.localStorage.getItem('running-tracker.sidebar-collapsed')).toBe('true');
+
+    firstRender.unmount();
+    renderShell();
+
+    expect(screen.getByTestId('app-shell')).toHaveClass('sidebar-collapsed');
+    await userEvent.click(screen.getByRole('button', { name: /Rozbalit menu/i }));
+    expect(window.localStorage.getItem('running-tracker.sidebar-collapsed')).toBe('false');
+  });
+
+  test('closes notifications from a collapsed sidebar with close button Escape and outside click', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/notifications/summary')) {
+          return Promise.resolve(jsonResponse({ unread_count: 1 }));
+        }
+        if (url.includes('/notifications')) {
+          return Promise.resolve(jsonResponse([notificationFixture]));
+        }
+        return Promise.resolve(jsonResponse(responseForAppShellUrl(url)));
+      }),
+    );
+
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter initialEntries={['/plans']}>
+          <AppShell user={{ id: 'u1', email: 'owner@example.com', display_name: null, timezone: 'Europe/Prague', units: 'metric' }}>
+            <div>Page content</div>
+          </AppShell>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /Sbalit menu/i }));
+    const notificationsButton = await screen.findByRole('button', { name: /Notifikace, 1 nepřečtená/i });
+
+    await userEvent.click(notificationsButton);
+    expect(screen.getByRole('dialog', { name: /Notifikace/i })).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('dialog', { name: /Notifikace/i })).getByRole('button', { name: /Zavřít/i }));
+    expect(screen.queryByRole('dialog', { name: /Notifikace/i })).not.toBeInTheDocument();
+
+    await userEvent.click(notificationsButton);
+    expect(screen.getByRole('dialog', { name: /Notifikace/i })).toBeInTheDocument();
+    await userEvent.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: /Notifikace/i })).not.toBeInTheDocument();
+
+    await userEvent.click(notificationsButton);
+    expect(screen.getByRole('dialog', { name: /Notifikace/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByText('Page content'));
+    expect(screen.queryByRole('dialog', { name: /Notifikace/i })).not.toBeInTheDocument();
+  });
+
   test('defines animated desktop sidebar drawer sizing', () => {
     const styles = readFileSync('src/styles.css', 'utf8');
 
@@ -52,6 +157,14 @@ describe('AppShell', () => {
     expect(cssDeclaration(styles, '.app-shell.sidebar-collapsed', 'grid-template-columns')).toBe('78px minmax(0, 1fr)');
     expect(cssDeclaration(styles, '.nav-link.icon-only', 'width')).toBe('54px');
     expect(styles).toMatch(/@media \(max-width: 980px\)[\s\S]*?\.app-shell\.sidebar-collapsed\s*\{\s*grid-template-columns:\s*1fr;/);
+  });
+
+  test('resets the refactored shell to one full-width column on mobile', () => {
+    const styles = readFileSync('src/styles/layout.css', 'utf8');
+
+    expect(styles).toMatch(
+      /@media \(max-width: 980px\)[\s\S]*?\.app-shell,[\s\S]*?\.app-shell\.sidebar-collapsed\s*\{\s*grid-template-columns:\s*minmax\(0, 1fr\);/,
+    );
   });
 
   test('opens mobile more navigation for secondary routes', async () => {
@@ -73,7 +186,8 @@ describe('AppShell', () => {
     const moreMenu = screen.getByRole('dialog', { name: /Další navigace/i });
     expect(within(moreMenu).getByRole('link', { name: /Události/i })).toBeInTheDocument();
     expect(within(moreMenu).getByRole('link', { name: /Reporty/i })).toBeInTheDocument();
-    expect(within(moreMenu).getByRole('link', { name: /Trendy/i })).toBeInTheDocument();
+    expect(within(moreMenu).getByRole('link', { name: /Kalendář/i })).toBeInTheDocument();
+    expect(within(moreMenu).queryByRole('link', { name: /Trendy/i })).not.toBeInTheDocument();
     expect(within(moreMenu).queryByRole('link', { name: /Vybavení/i })).not.toBeInTheDocument();
     expect(within(moreMenu).getByRole('link', { name: /Nastavení/i })).toBeInTheDocument();
     expect(within(moreMenu).getByRole('button', { name: /Odhlásit/i })).toBeInTheDocument();
@@ -491,4 +605,14 @@ function cssDeclaration(styles: string, selector: string, property: string) {
   const match = styles.match(new RegExp(`${selectorPattern}\\s*\\{([^}]*)\\}`));
   const declaration = match?.[1].match(new RegExp(`${property}\\s*:\\s*([^;]+)`));
   return declaration?.[1].trim();
+}
+
+function createLocalStorageMock() {
+  const values = new Map<string, string>();
+  return {
+    clear: vi.fn(() => values.clear()),
+    getItem: vi.fn((key: string) => values.get(key) ?? null),
+    removeItem: vi.fn((key: string) => values.delete(key)),
+    setItem: vi.fn((key: string, value: string) => values.set(key, value)),
+  };
 }

@@ -1,0 +1,397 @@
+.panel,
+.table-panel,
+.chart-box,
+.metric-card {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.panel,
+.chart-box,
+.metric-card {
+  background: var(--surface);
+}
+
+.page-header {
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-header h1 {
+  letter-spacing: -0.035em;
+}
+
+.visual-page-hero {
+  min-height: 0;
+  padding: 4px 0 24px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.visual-page-hero::before,
+.visual-page-hero::after {
+  display: none;
+}
+
+.visual-page-hero h1 {
+  max-width: 760px;
+  font-size: clamp(2.2rem, 4vw, 3.8rem);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+}
+
+.visual-page-hero > div:first-child > p:not(.eyebrow) {
+  max-width: 720px;
+  color: var(--text-muted);
+  font-size: 1.02rem;
+}
+
+.visual-page-hero .hero-stat-row {
+  gap: 10px 22px;
+}
+
+.visual-page-hero .runner-scene {
+  max-width: 260px;
+  opacity: 0.86;
+}
+
+.primary-button {
+  background: var(--green-dark);
+}
+
+.secondary-button {
+  background: var(--surface);
+}
+
+.activity-filter-panel {
+  box-shadow: none;
+}
+
+.plan-view-tabs {
+  display: flex;
+  gap: 26px;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-view-tabs button {
+  position: relative;
+  padding: 10px 2px 13px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.plan-view-tabs button.active,
+.plan-view-tabs button[aria-selected='true'] {
+  color: var(--text);
+}
+
+.plan-view-tabs button.active::after,
+.plan-view-tabs button[aria-selected='true']::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 3px;
+  background: var(--green-dark);
+  content: '';
+}
+
+.plans-page[data-plan-view='week'] .planning-volume-outlook,
+.plans-page[data-plan-view='week'] .long-term-week-row:not(:first-child) {
+  display: none;
+}
+
+.plans-page[data-plan-view='week'] .planning-long-term-layout {
+  display: none;
+}
+
+.plans-page[data-plan-view='outlook'] .plan-week-schedule {
+  display: none;
+}
+
+.plan-week-schedule {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.plan-week-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.plan-week-summary > div {
+  padding: 18px 20px;
+}
+
+.plan-week-summary > div + div {
+  border-left: 1px solid var(--border);
+}
+
+.plan-week-summary dt {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.plan-week-summary dd {
+  margin: 6px 0 0;
+  color: var(--blue);
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.plan-sync-note {
+  margin: 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.84rem;
+}
+
+.plan-week-list {
+  display: grid;
+}
+
+.plan-week-row {
+  display: grid;
+  grid-template-columns: 108px minmax(0, 1fr) 140px 22px;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  min-height: 70px;
+  padding: 12px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.plan-week-row:last-child {
+  border-bottom: 0;
+}
+
+.plan-week-row:hover,
+.plan-week-row:focus-visible {
+  background: var(--surface-soft);
+}
+
+.plan-week-row.planned {
+  box-shadow: inset 3px 0 0 var(--amber);
+}
+
+.plan-week-date,
+.plan-week-session {
+  display: grid;
+  gap: 3px;
+}
+
+.plan-week-date time,
+.plan-week-session small,
+.plan-week-row > span:nth-child(3) {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+@media (min-width: 981px) {
+  .day-editor-modal {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(440px, 38vw);
+    height: 100vh;
+    max-height: none;
+    margin: 0;
+    overflow-y: auto;
+    border-radius: 0;
+    box-shadow: -24px 0 60px rgba(11, 35, 27, 0.16);
+  }
+}
+
+.calendar-shell {
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.calendar-toolbar {
+  border-bottom: 1px solid var(--border);
+}
+
+.calendar-board.month {
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--border);
+}
+
+.calendar-board.month .calendar-day {
+  min-height: 132px;
+  border: 0;
+  border-radius: 0;
+  background: var(--surface);
+}
+
+.calendar-board.week {
+  gap: 10px;
+}
+
+.trends-page .chart-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.trends-page .recent-week-row {
+  border-color: var(--border);
+  background: transparent;
+}
+
+.events-grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+  border-block: 1px solid var(--border);
+}
+
+.events-grid > * {
+  border-width: 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.events-grid > *:last-child {
+  border-bottom: 0;
+}
+
+.heatmap-page > .panel:last-child {
+  order: 1;
+  padding: 0;
+  overflow: hidden;
+}
+
+.heatmap-page > .visual-page-hero { order: 0; }
+.heatmap-page > .metric-grid { order: 2; }
+.heatmap-page > .heatmap-filter-panel { order: 3; }
+
+.heatmap-page > .panel:last-child .panel-heading,
+.heatmap-page > .panel:last-child .helper-text {
+  margin: 18px 20px;
+}
+
+.route-explorer-grid {
+  grid-template-columns: minmax(300px, 370px) minmax(0, 1fr);
+  align-items: start;
+}
+
+.route-form {
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.route-results-panel {
+  min-height: 640px;
+}
+
+.reports-page .annual-report-panel,
+.reports-page .report-card,
+.reports-page .report-generator {
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+.settings-page > .split-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+}
+
+.settings-page > .split-grid > .panel {
+  min-height: 100%;
+}
+
+.landing-shell,
+.auth-shell {
+  background-color: var(--canvas);
+}
+
+.map-shell,
+.route-map,
+.heatmap-map {
+  border-radius: var(--radius);
+}
+
+@media (max-width: 760px) {
+  .page-header {
+    align-items: flex-start;
+  }
+
+  .panel,
+  .chart-box,
+  .metric-card {
+    border-radius: 8px;
+  }
+
+  .visual-page-hero {
+    padding-bottom: 18px;
+  }
+
+  .visual-page-hero .runner-scene {
+    display: none;
+  }
+
+  .trends-page .chart-grid,
+  .settings-page > .split-grid,
+  .route-explorer-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .route-form {
+    position: static;
+    max-height: none;
+  }
+
+  .plan-week-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .plan-week-summary > div:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .plan-week-summary > div:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .plan-week-row {
+    grid-template-columns: 74px minmax(0, 1fr) 18px;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .plan-week-row > span:nth-child(3) {
+    display: none;
+  }
+
+  .calendar-board.month {
+    display: none;
+  }
+
+  .calendar-board.week {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

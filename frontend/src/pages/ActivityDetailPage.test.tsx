@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -46,6 +47,14 @@ describe('ActivityDetailPage', () => {
 
     expect(await screen.findByTestId('activity-map')).toHaveTextContent('3 GPS points');
     expect(screen.queryByText(/No GPS track/i)).not.toBeInTheDocument();
+  });
+
+  test('keeps the MapLibre container stretched across the visible route panel', () => {
+    const styles = readFileSync(`${process.cwd()}/src/styles.css`, 'utf8');
+    const mapCanvasRule = styles.match(/(?:^|\n)\.activity-map-canvas\s*\{(?<body>[^}]*)\}/m);
+
+    expect(mapCanvasRule?.groups?.body).toContain('width: 100%');
+    expect(mapCanvasRule?.groups?.body).toContain('height: 100%');
   });
 
   test('shows an empty map state without route coordinates', async () => {
@@ -135,6 +144,23 @@ describe('ActivityDetailPage', () => {
     expect(chartData.pace[2]).toMatchObject({ index: 2, progress: 1 });
   });
 
+  test('plots faster pace samples higher while preserving pace values for labels', () => {
+    const velocity = [...Array.from({ length: 20 }, () => 2.5), ...Array.from({ length: 20 }, () => 4)];
+    const chartData = buildChartSeries([
+      { stream_type: 'distance', data: velocity.map((_, index) => index * 10), sample_count: velocity.length },
+      { stream_type: 'velocity_smooth', data: velocity, sample_count: velocity.length },
+      { stream_type: 'moving', data: velocity.map(() => true), sample_count: velocity.length },
+    ]);
+    const pacePoints = chartData.pace as Array<{ value: number; chartValue?: number }>;
+    const firstPoint = pacePoints[0];
+    const lastPoint = pacePoints[pacePoints.length - 1];
+
+    expect(firstPoint.value).toBeGreaterThan(lastPoint.value);
+    expect(typeof firstPoint.chartValue).toBe('number');
+    expect(typeof lastPoint.chartValue).toBe('number');
+    expect(firstPoint.chartValue).toBeLessThan(lastPoint.chartValue as number);
+  });
+
   test('removes non-moving samples and implausible pace spikes from the pace chart', () => {
     const chartData = buildChartSeries([
       { stream_type: 'distance', data: [0, 100, 200, 300, 400, 500, 600], sample_count: 7 },
@@ -179,6 +205,19 @@ describe('ActivityDetailPage', () => {
     expect(paceDomain[0]).toBeGreaterThan(0);
     expect(paceDomain[1]).toBeLessThan(28);
     expect(heartRateDomain).toEqual([135.5, 143.5]);
+  });
+
+  test('uses chart values instead of label values when deriving stream chart domains', () => {
+    const domain = chartValueDomain(
+      [
+        { index: 0, progress: 0, value: 6, chartValue: 10 },
+        { index: 1, progress: 1, value: 4, chartValue: 15 },
+      ] as ReturnType<typeof buildChartSeries>['pace'],
+      { minSpan: 1 },
+    );
+
+    expect(domain[0]).toBeLessThan(10);
+    expect(domain[1]).toBeGreaterThan(15);
   });
 
   test('maps chart hover progress to the nearest route coordinate', () => {

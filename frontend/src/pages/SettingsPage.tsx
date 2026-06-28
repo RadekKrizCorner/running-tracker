@@ -116,7 +116,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="page-stack">
+    <div className="page-stack settings-page">
       <header className="visual-page-hero settings">
         <div>
           <p className="eyebrow">{t('settings.eyebrow')}</p>

@@ -1,24 +1,15 @@
 import {
-  Activity,
-  BarChart3,
   Bell,
-  CalendarDays,
-  Dumbbell,
-  FileText,
-  Gauge,
   LogOut,
-  Map,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
-  Route,
-  Settings,
   Trash2,
-  Trophy,
   UserCircle,
+  X,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useLogout } from '../../features/auth/api';
 import {
@@ -35,28 +26,15 @@ import type { CalendarResponse, PlannedWorkout, User } from '../../lib/api/types
 import { toIsoDate } from '../../lib/date';
 import { formatDuration } from '../../lib/format';
 import { enumLabel, useTranslation } from '../../lib/i18n';
+import { mobileMoreItems, mobilePrimaryItems, navigationGroups } from './navigation';
 
 type AppShellProps = {
   user: User | undefined;
   children: ReactNode;
 };
 
-const navItems = [
-  { to: '/dashboard', labelKey: 'nav.dashboard', icon: Gauge },
-  { to: '/activities', labelKey: 'nav.activities', icon: Activity },
-  { to: '/calendar', labelKey: 'nav.calendar', icon: CalendarDays },
-  { to: '/events', labelKey: 'nav.events', icon: Trophy },
-  { to: '/plans', labelKey: 'nav.plans', icon: Dumbbell },
-  { to: '/reports', labelKey: 'nav.reports', icon: FileText },
-  { to: '/heatmap', labelKey: 'nav.heatmap', icon: Map },
-  { to: '/routes', labelKey: 'nav.routes', icon: Route },
-  { to: '/trends', labelKey: 'nav.trends', icon: BarChart3 },
-  { to: '/settings', labelKey: 'nav.settings', icon: Settings },
-];
-
-const mobilePrimaryItems = navItems.filter((item) => ['/dashboard', '/activities', '/calendar', '/plans'].includes(item.to));
-const mobileMoreItems = navItems.filter((item) => !mobilePrimaryItems.some((primary) => primary.to === item.to));
 const AVATAR_IMAGE_MAX_BYTES = 1_500_000;
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'running-tracker.sidebar-collapsed';
 
 export function AppShell({ user, children }: AppShellProps) {
   const { setLocale, t } = useTranslation();
@@ -64,7 +42,7 @@ export function AppShell({ user, children }: AppShellProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [moreOpen, setMoreOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsedPreference);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [avatarOpen, setAvatarOpen] = useState(false);
   const [selectedAvatarIcon, setSelectedAvatarIcon] = useState<string | null>(null);
@@ -91,12 +69,47 @@ export function AppShell({ user, children }: AppShellProps) {
   const selectedIcon = avatarIconById(selectedAvatarIcon);
   const selectedImage = safeAvatarImage(selectedAvatarImage);
   const isDemo = Boolean(user?.is_demo);
+  const notificationButtonRef = useRef<HTMLButtonElement | null>(null);
+  const notificationPopoverRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (preferences.data?.locale) {
       setLocale(preferences.data.locale);
     }
   }, [preferences.data?.locale, setLocale]);
+
+  useEffect(() => {
+    writeSidebarCollapsedPreference(sidebarCollapsed);
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!notificationsOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setNotificationsOpen(false);
+      }
+    };
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (notificationPopoverRef.current?.contains(target) || notificationButtonRef.current?.contains(target)) {
+        return;
+      }
+      setNotificationsOpen(false);
+    };
+
+    document.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('pointerdown', closeOnOutsidePointerDown);
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape);
+      document.removeEventListener('pointerdown', closeOnOutsidePointerDown);
+    };
+  }, [notificationsOpen]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setToday(toIsoDate(new Date())), 60_000);
@@ -158,6 +171,7 @@ export function AppShell({ user, children }: AppShellProps) {
           </div>
           <div className="brand-actions">
             <button
+              ref={notificationButtonRef}
               className={unreadCount > 0 ? 'notification-button active' : 'notification-button'}
               type="button"
               aria-expanded={notificationsOpen}
@@ -177,14 +191,19 @@ export function AppShell({ user, children }: AppShellProps) {
               {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
             </button>
             {notificationsOpen ? (
-              <div className="notification-popover" role="dialog" aria-label={t('notifications.title')}>
+              <div ref={notificationPopoverRef} className="notification-popover" role="dialog" aria-label={t('notifications.title')}>
                 <div className="notification-popover-header">
                   <strong>{t('notifications.title')}</strong>
-                  {unreadCount > 0 && !isDemo ? (
-                    <button className="text-button" type="button" onClick={() => markAllNotificationsRead.mutate()}>
-                      {t('notifications.markAllRead')}
+                  <div className="notification-popover-actions">
+                    {unreadCount > 0 && !isDemo ? (
+                      <button className="text-button" type="button" onClick={() => markAllNotificationsRead.mutate()}>
+                        {t('notifications.markAllRead')}
+                      </button>
+                    ) : null}
+                    <button className="icon-button" type="button" aria-label={t('common.close')} onClick={() => setNotificationsOpen(false)}>
+                      <X size={16} />
                     </button>
-                  ) : null}
+                  </div>
                 </div>
                 <div className="notification-list">
                   {(notifications.data ?? []).length > 0 ? (
@@ -226,19 +245,24 @@ export function AppShell({ user, children }: AppShellProps) {
             ) : null}
           </div>
         </div>
-        <nav aria-label={t('nav.primaryNavigation')}>
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const label = t(item.labelKey);
-            const className = ({ isActive }: { isActive: boolean }) =>
-              [isActive ? 'nav-link active' : 'nav-link', sidebarCollapsed ? 'icon-only' : ''].filter(Boolean).join(' ');
-            return (
-              <NavLink key={item.to} to={item.to} className={className} aria-label={label} title={label}>
-                <Icon size={18} />
-                <span className="nav-label">{label}</span>
-              </NavLink>
-            );
-          })}
+        <nav aria-label={t('nav.primaryNavigation')} className="sidebar-navigation">
+          {navigationGroups.map((group) => (
+            <section className="nav-group" key={group.labelKey}>
+              <span className="nav-group-label">{t(group.labelKey).toLocaleUpperCase()}</span>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const label = t(item.labelKey);
+                const className = ({ isActive }: { isActive: boolean }) =>
+                  [isActive ? 'nav-link active' : 'nav-link', sidebarCollapsed ? 'icon-only' : ''].filter(Boolean).join(' ');
+                return (
+                  <NavLink key={item.to} to={item.to} className={className} aria-label={label} title={label}>
+                    <Icon size={18} />
+                    <span className="nav-label">{label}</span>
+                  </NavLink>
+                );
+              })}
+            </section>
+          ))}
         </nav>
         <button
           className={sidebarCollapsed ? 'nav-link button-link icon-only' : 'nav-link button-link'}
@@ -262,13 +286,14 @@ export function AppShell({ user, children }: AppShellProps) {
         </div>
       </aside>
       <main className="main-content">{children}</main>
-      <nav className="bottom-nav">
+      <nav className="bottom-nav" aria-label={t('nav.mobileNavigation')}>
         {mobilePrimaryItems.map((item) => {
           const Icon = item.icon;
+          const label = t(item.mobileLabelKey ?? item.labelKey);
           return (
-            <NavLink key={item.to} to={item.to} className="bottom-nav-link">
+            <NavLink key={item.to} to={item.to} className="bottom-nav-link" aria-label={label}>
               <Icon size={20} />
-              <span>{t(item.labelKey)}</span>
+              <span>{label}</span>
             </NavLink>
           );
         })}
@@ -476,6 +501,27 @@ function formatCompactDistance(meters: number | null | undefined) {
     return `${km} km`;
   }
   return `${km.toFixed(km >= 10 ? 1 : 2)} km`;
+}
+
+function readSidebarCollapsedPreference() {
+  try {
+    if (typeof window === 'undefined' || typeof window.localStorage?.getItem !== 'function') {
+      return false;
+    }
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function writeSidebarCollapsedPreference(isCollapsed: boolean) {
+  try {
+    if (typeof window !== 'undefined' && typeof window.localStorage?.setItem === 'function') {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(isCollapsed));
+    }
+  } catch {
+    // Sidebar persistence is a convenience; storage failures should not affect navigation.
+  }
 }
 
 function readDataUrlFile(file: File, onLoad: (content: string) => void, onError: () => void) {

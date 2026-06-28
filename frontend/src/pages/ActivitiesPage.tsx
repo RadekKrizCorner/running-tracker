@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, ArrowUpDown, Search, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../components/ui/EmptyState';
+import { ActivityMobileList } from '../components/activities/ActivityMobileList';
 import { useActivities } from '../features/activities/api';
 import { addDaysToIso, addMonthsToIso, toIsoDate } from '../lib/date';
 import { formatDate, formatDistance, formatDuration, formatPace } from '../lib/format';
@@ -173,6 +174,7 @@ export function ActivitiesPage() {
           </tbody>
         </table>
       </div>
+      <ActivityMobileList activities={activities.data ?? []} />
     </div>
   );
 }
