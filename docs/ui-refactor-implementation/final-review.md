@@ -31,13 +31,13 @@ Refaktor nahrazuje původní vizuální vrstvu systémem Training Brief napří�
 - Navigační struktura je centralizovaná v `components/layout/navigation.ts`.
 - Nové styly jsou oddělené na tokens, base, layout, components a pages a načítají se až po legacy stylesheetu.
 - Dashboard a mobile activities používají malé samostatné komponenty.
-- React implementace zachovává existující query cache a lazy-loaded routy; nevznikly nové paralelní datové requesty pro stejné informace.
+- React implementace zachovává existující query cache a lazy-loaded routy; Outlook používá oddělený viditelný horizon dotaz a širší srovnávací dotaz se stabilními cache klíči.
 - Nové funkční chování je pokryté regresními testy včetně mobilní šířky, navigace, plan tabs, integrační provenance a správného výběru dnešního workoutu.
 
 ### Nálezy
 
 - Critical: žádné.
-- Important: poslední nezávislý nález k nekonzistentnímu započítání cancelled workoutů je opraven napříč všemi aktivními plánovacími read/agregačními cestami a čeká na finální nezávislý gate.
+- Important: poslední nezávislé nálezy k započítání a nechtěnému smazání cancelled workoutů jsou opravené napříč aktivními read/agregačními i week-replacement cestami a čekají na finální nezávislý gate.
 - Minor: Vitest/jsdom vypisuje existující upozornění k canvas a `--localstorage-file`; testy přesto končí bez failure. Backend hlásí existující Starlette deprecation warning.
 - Minor: Legacy `styles.css` zůstává dočasně základem kvůli zachování všech méně častých stavů; nové vrstvy jsou nad ním a mohou být v samostatné budoucí práci postupně konsolidovány.
 
@@ -45,7 +45,7 @@ Refaktor nahrazuje původní vizuální vrstvu systémem Training Brief napří�
 
 - Frontend testy: 23 souborů, 166 testů včetně regresního pokrytí owner-local timezone rolloveru v plánování, dashboardovém Today i shell kartě, zrušeného dnešního workoutu, zarovnaných plánovacích rozsahů, přístupného přesunu mezi týdny, mobilního řazení a lazy Outlook dotazů.
 - Frontend production build: TypeScript a Vite build bez chyby.
-- Backend testy: 177 testů bez failure při explicitně produkčně bezpečných testovacích overrides (`DEMO_ACCOUNT_ENABLED=false`, `ROUTING_ENABLED=false`, `ROUTING_PROVIDER=valhalla`), včetně vyloučení cancelled workoutů z Calendar/Plans, dashboardu, trendů, reportů, event readiness a week-copy cest.
+- Backend testy: 178 testů bez failure při explicitně produkčně bezpečných testovacích overrides (`DEMO_ACCOUNT_ENABLED=false`, `ROUTING_ENABLED=false`, `ROUTING_PROVIDER=valhalla`), včetně vyloučení cancelled workoutů z aktivních pohledů a zachování jejich detailu i ZIP exportu po week save/copy.
 - `git diff --check`: bez whitespace chyb.
 - Browser QA: 10 desktop rout a 6 mobilních rout bez overflow; mobilní month calendar má při 390 px 42 buněk v 7 sloupcích, výšku gridu 343 px a nulový horizontální overflow; 0 console errors/warnings.
 
