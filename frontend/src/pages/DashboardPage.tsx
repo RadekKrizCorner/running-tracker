@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Activity, CheckCircle2, ChevronLeft, ChevronRight, Circle, Clock, Mountain, Route, TrendingUp } from 'lucide-react';
 import { IntensityChart, WeeklyDistanceChart, WeeklyLoadChart } from '../components/charts/WeeklyCharts';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -20,6 +20,7 @@ import { useHeartRateZones, useUserPreferences } from '../features/profile/api';
 import type { StravaSyncJobStatus, SyncProgress, WeekPlanComparison, WeekPlanRow } from '../lib/api/types';
 import { formatDate, formatDistance, formatDuration, formatWeekdayDate, formatWeekRange } from '../lib/format';
 import { enumLabel, useTranslation } from '../lib/i18n';
+import { useOwnerToday } from '../lib/useOwnerToday';
 
 type DashboardMode = 'simple' | 'advanced';
 
@@ -28,7 +29,9 @@ export function DashboardPage() {
   const [syncJobId, setSyncJobId] = useState<string | null>(null);
   const [selectedWeekStart, setSelectedWeekStart] = useState<string | null>(null);
   const me = useMe();
+  const today = useOwnerToday(me.data?.timezone);
   const dashboard = useDashboard('week');
+  const previousToday = useRef(today);
   const selectedWeekDashboard = useDashboard('week', selectedWeekStart ?? undefined);
   const strava = useStravaStatus();
   const hrZones = useHeartRateZones();
@@ -48,6 +51,14 @@ export function DashboardPage() {
     }
   }, [strava.data?.active_job_id]);
 
+  useEffect(() => {
+    if (previousToday.current === today) {
+      return;
+    }
+    previousToday.current = today;
+    void dashboard.refetch();
+  }, [dashboard.refetch, today]);
+
   if (dashboard.isLoading || selectedWeekDashboard.isLoading || strava.isLoading || preferences.isLoading) {
     return <div className="screen-center">{t('common.loadingDashboard')}</div>;
   }
@@ -58,7 +69,7 @@ export function DashboardPage() {
 
   return (
     <div className="page-stack dashboard-page">
-      <TodayBrief data={data} timeZone={me.data?.timezone} />
+      <TodayBrief data={data} today={today} />
 
       <section className="metric-grid dashboard-secondary-metrics" aria-label={t('dashboard.supportingMetrics')}>
         <MetricCard label={t('dashboard.movingTime')} value={formatDuration(data?.this_week.moving_time_s)} detail={t('dashboard.thisWeek')} />

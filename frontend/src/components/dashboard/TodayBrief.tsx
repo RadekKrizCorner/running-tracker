@@ -1,18 +1,16 @@
 import { CalendarDays, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { Dashboard } from '../../lib/api/types';
-import { todayIso } from '../../lib/date';
 import { formatDate, formatDistance, formatDuration } from '../../lib/format';
 import { useTranslation } from '../../lib/i18n';
 
 type TodayBriefProps = {
   data: Dashboard | undefined;
-  timeZone?: string;
+  today: string;
 };
 
-export function TodayBrief({ data, timeZone }: TodayBriefProps) {
+export function TodayBrief({ data, today }: TodayBriefProps) {
   const { t } = useTranslation();
-  const today = todayIso(timeZone);
   const planned = data?.upcoming_workouts.find(
     (workout) => workout.scheduled_date === today && workout.status !== 'cancelled',
   );
